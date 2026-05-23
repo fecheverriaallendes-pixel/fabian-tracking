@@ -1,6 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User } from '../types';
-import { dbService } from '../services/db';
 import { toast } from 'sonner';
 
 interface AuthContextType {
@@ -10,9 +9,16 @@ interface AuthContextType {
   logout: () => Promise<void>;
 }
 
+const DEFAULT_USER: User = {
+  uid: 'fabian',
+  email: 'f.echeverria.allendes@gmail.com',
+  nombre: 'Fabián Maestro',
+  rol: 'admin'
+};
+
 const AuthContext = createContext<AuthContextType>({
-  user: null,
-  loading: true,
+  user: DEFAULT_USER,
+  loading: false,
   login: async () => {},
   logout: async () => {},
 });
@@ -20,31 +26,24 @@ const AuthContext = createContext<AuthContextType>({
 export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(DEFAULT_USER);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Check local storage for session
-    const storedUser = localStorage.getItem('logitrack_session');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
+    // Al utilizar el link directo, ingresa automáticamente con privilegios de Administrador
+    setUser(DEFAULT_USER);
     setLoading(false);
   }, []);
 
   const login = async (email: string, password?: string) => {
-    if (!password) {
-      throw new Error('La contraseña es requerida');
-    }
-
-    const user = await dbService.verifyUser(email, password);
-    localStorage.setItem('logitrack_session', JSON.stringify(user));
-    setUser(user);
+    setUser(DEFAULT_USER);
   };
 
   const logout = async () => {
-    localStorage.removeItem('logitrack_session');
-    setUser(null);
+    toast.info('Acceso de libre ingreso activo', {
+      description: 'Cualquier persona que visite el enlace tiene acceso completo. No se requiere inicio ni cierre de sesión.',
+      duration: 5000
+    });
   };
 
   return (
