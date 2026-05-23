@@ -25,11 +25,18 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       "flex flex-col h-full bg-slate-900 text-white w-64 fixed left-0 top-0 bottom-0 shadow-xl z-50 transition-transform duration-300 ease-in-out md:translate-x-0",
       isOpen ? "translate-x-0" : "-translate-x-full"
     )}>
-      <div className="p-6 border-b border-slate-800 flex justify-between items-center">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight text-blue-500">FABIAN - TRACK</h1>
-          <span className="text-xs font-medium text-slate-500">Info transporte</span>
-          <p className="text-xs text-slate-400 mt-1">Gestión de Logística</p>
+      <div className="p-5 border-b border-slate-800 flex justify-between items-center">
+        <div className="flex items-center space-x-3">
+          <img 
+            src="/icon.svg" 
+            className="w-10 h-10 rounded-xl shadow-lg border border-slate-700 bg-slate-950 p-1 shrink-0" 
+            alt="Logo" 
+            referrerPolicy="no-referrer"
+          />
+          <div>
+            <h1 className="text-sm font-black tracking-wider text-blue-400 uppercase leading-none">FABIAN - TRACK</h1>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mt-0.5">LOGÍSTICA</span>
+          </div>
         </div>
         <button
           onClick={onClose}

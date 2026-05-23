@@ -81,10 +81,15 @@ export default function Login() {
               initial={{ rotate: -15, scale: 0.8 }}
               animate={{ rotate: 0, scale: 1 }}
               transition={{ delay: 0.2, type: 'spring' }}
-              className="h-14 w-14 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-500/20 relative group"
+              className="h-20 w-20 bg-slate-950 rounded-2xl flex items-center justify-center shadow-2xl relative group p-1.5 border border-slate-800"
             >
-              <div className="absolute inset-0 bg-blue-500 rounded-2xl blur group-hover:blur-md opacity-50 transition-all duration-300" />
-              <Truck className="relative z-10 h-7 w-7 text-white" />
+              <div className="absolute inset-0 bg-blue-500/20 rounded-2xl blur group-hover:blur-md opacity-40 transition-all duration-300" />
+              <img 
+                src="/icon.svg" 
+                className="relative z-10 h-full w-full object-contain" 
+                alt="App Logo" 
+                referrerPolicy="no-referrer"
+              />
             </motion.div>
             
             <motion.h1 

@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b0f19" />
+      <stop offset="100%" stop-color="#1e1b4b" />
+    </linearGradient>
+    
+    <!-- Primary Blue/Indigo Gradient -->
+    <linearGradient id="primary-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="50%" stop-color="#3b82f6" />
+      <stop offset="100%" stop-color="#6366f1" />
+    </linearGradient>
+    
+    <!-- Accent Amber/Gold Gradient for details -->
+    <linearGradient id="accent-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fbbf24" />
+      <stop offset="100%" stop-color="#f59e0b" />
+    </linearGradient>
+
+    <!-- Map pin background glow -->
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.25" />
+      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+
+  <!-- App Icon Rounded Container -->
+  <rect width="512" height="512" rx="112" fill="url(#bg-grad)" />
+  <rect x="12" y="12" width="488" height="488" rx="100" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="4" />
+
+  <!-- Ambient Blue Radial Glow -->
+  <circle cx="256" cy="240" r="180" fill="url(#glow)" />
+
+  <!-- Abstract Road / Grid tracks indicating motion & geography -->
+  <path d="M 120 380 Q 256 420 392 380" fill="none" stroke="#1e293b" stroke-width="8" stroke-linecap="round" />
+  <path d="M 160 410 Q 256 445 352 410" fill="none" stroke="#334155" stroke-width="4" stroke-dasharray="8 8" stroke-linecap="round" />
+
+  <!-- MAIN EMBLEM: MAP LOCATOR PIN with integrated freight details -->
+  <!-- Outer Pin Shape -->
+  <path d="M 256 64 C 150 64 64 150 64 256 C 64 350 140 410 256 448 C 372 410 448 350 448 256 C 448 150 362 64 256 64 Z" 
+        fill="none" 
+        stroke="url(#primary-grad)" 
+        stroke-width="16" 
+        stroke-linejoin="round"
+        stroke-linecap="round" />
+
+  <!-- THE TRUCK (Stylized, moving fast inside the map marker) -->
+  <!-- Wind / Velocity lines behind the truck -->
+  <line x1="120" y1="210" x2="180" y2="210" stroke="#38bdf8" stroke-width="6" stroke-linecap="round" stroke-opacity="0.5" />
+  <line x1="100" y1="240" x2="160" y2="240" stroke="#6366f1" stroke-width="8" stroke-linecap="round" stroke-opacity="0.7" />
+  <line x1="115" y1="270" x2="175" y2="270" stroke="#38bdf8" stroke-width="6" stroke-linecap="round" stroke-opacity="0.5" />
+
+  <!-- Truck Cabin & Cargo Bed Group -->
+  <g transform="translate(15, 0)">
+    <!-- Cargo Box (Freight Body) -->
+    <rect x="180" y="190" width="130" height="90" rx="6" fill="url(#primary-grad)" />
+    
+    <!-- Cargo Details (Diagonal logistics lines) -->
+    <path d="M 210 190 L 250 280 M 260 190 L 300 280" stroke="#ffffff" stroke-width="4" stroke-opacity="0.2" />
+
+    <!-- Truck Cabin (Front) -->
+    <path d="M 310 210 L 345 210 C 355 210 365 218 368 228 L 375 255 C 378 265 374 280 362 280 L 310 280 Z" fill="#f8fafc" />
+    
+    <!-- Cabin Window -->
+    <path d="M 318 220 L 340 220 C 345 220 348 224 349 229 L 354 246 C 355 251 352 255 347 255 L 318 255 Z" fill="#0f172a" />
+    
+    <!-- Orange safety stripe/indicator -->
+    <rect x="310" y="262" width="56" height="5" rx="2" fill="url(#accent-grad)" />
+
+    <!-- Wheels (Double rear, single front) with shiny rims -->
+    <!-- Front Wheel -->
+    <circle cx="340" cy="290" r="18" fill="#0f172a" stroke="#ffffff" stroke-width="2" />
+    <circle cx="340" cy="290" r="7" fill="#64748b" />
+    
+    <!-- Rear Wheel 2 -->
+    <circle cx="275" cy="290" r="18" fill="#0f172a" stroke="#ffffff" stroke-width="2" />
+    <circle cx="275" cy="290" r="7" fill="#64748b" />
+
+    <!-- Rear Wheel 1 -->
+    <circle cx="225" cy="290" r="18" fill="#0f172a" stroke="#ffffff" stroke-width="2" />
+    <circle cx="225" cy="290" r="7" fill="#64748b" />
+  </g>
+
+  <!-- Glowing Map Pin Center Target (Bullseye representing precise destination) -->
+  <circle cx="256" cy="125" r="18" fill="url(#accent-grad)" />
+  <circle cx="256" cy="125" r="30" fill="none" stroke="#fbbf24" stroke-width="4" stroke-opacity="0.3" stroke-dasharray="4 4" />
+
+  <!-- Elegant Location Wave Ripples underneath -->
+  <ellipse cx="256" cy="455" rx="60" ry="10" fill="none" stroke="#38bdf8" stroke-width="4" stroke-opacity="0.6" />
+</svg>

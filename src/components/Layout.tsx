@@ -9,10 +9,18 @@ export function Layout() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
       {/* Mobile Top Header: Sticky on smaller viewport heights/widths */}
-      <header className="md:hidden flex items-center justify-between px-5 py-4 bg-slate-900 border-b border-slate-800 text-white sticky top-0 z-40 shadow-md">
-        <div className="flex flex-col">
-          <span className="text-sm font-black tracking-wider text-blue-500 uppercase">Fabian - Track</span>
-          <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Info transporte</span>
+      <header className="md:hidden flex items-center justify-between px-5 py-3 bg-slate-900 border-b border-slate-800 text-white sticky top-0 z-40 shadow-md">
+        <div className="flex items-center space-x-3">
+          <img 
+            src="/icon.svg" 
+            className="w-8 h-8 rounded-lg shadow bg-slate-950 p-0.5 border border-slate-700" 
+            alt="Logo" 
+            referrerPolicy="no-referrer"
+          />
+          <div className="flex flex-col">
+            <span className="text-sm font-black tracking-wider text-blue-400 uppercase leading-none">Fabian - Track</span>
+            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Logística</span>
+          </div>
         </div>
         <button
           onClick={() => setIsSidebarOpen(true)}
