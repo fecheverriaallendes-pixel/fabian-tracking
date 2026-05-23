@@ -106,122 +106,137 @@ async function startServer() {
   transInsert(INITIAL_USERS);
   console.log('Seeded and synchronized flexible default users successfully.');
 
-  // Seeding Initial Transports if Empty
-  const transportCountRes = db.prepare('SELECT count(*) as count FROM transports').get() as { count: number };
-  if (transportCountRes.count === 0) {
-    console.log('Seeding initial transports...');
-    
-    const generateInitialTransports = () => {
-      const transportMap: Record<string, any> = {};
-      const baseTransports = [
-        { name: "Starken", type: "normal", cost: 4000, time: "24-72 hrs", tarifaRef: "" },
-        { name: "Pullman Cargo", type: "cargo", cost: 5000, time: "48-96 hrs", tarifaRef: "" },
-        { name: "Blue Express", type: "express", cost: 3500, time: "24-48 hrs", tarifaRef: "" },
-        { name: "Varmontt", type: "normal", cost: 4500, time: "24-48 hrs", tarifaRef: "" },
-        { name: "Transportes Regionales", type: "cargo", cost: 6000, time: "72+ hrs", tarifaRef: "" },
-        { name: "Correos de Chile", type: "normal", cost: 3000, time: "48-72 hrs", tarifaRef: "" },
-        { name: "Rapa Nui Cargo", type: "cargo", cost: 15000, time: "7-14 días", tarifaRef: "" },
-        { name: "Aricargo", type: "cargo", cost: 21000, time: "48-72 hrs", tarifaRef: "$18.000 - $24.000" },
-        { name: "JT", type: "normal", cost: 18000, time: "48-72 hrs", tarifaRef: "$16.000 - $20.000" },
-        { name: "Transportes Barrios", type: "cargo", cost: 14500, time: "48-72 hrs", tarifaRef: "$13.000 - $16.000" },
-        { name: "Transcargo", type: "cargo", cost: 5000, time: "48-72 hrs", tarifaRef: "" },
-        { name: "CyC", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
-        { name: "Ate", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
-        { name: "Mundaca", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
-        { name: "Chevalier", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
-        { name: "Diabama", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
-        { name: "Manques", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
-        { name: "Villa Prat", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
-        { name: "G&P (Gulliver)", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
-        { name: "TVP (Valle Puangue)", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
-        { name: "Pullman Bus", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
-        { name: "Envias Cargo", type: "cargo", cost: 5000, time: "48-72 hrs", tarifaRef: "" },
-        { name: "Ecomex", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
-        { name: "5 Sur", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
-        { name: "Transantin", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
-        { name: "Condor Bus", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
-        { name: "Buses Nilahue", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
-        { name: "Andimar", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
-        { name: "Pullman del Sur", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
-        { name: "Altas Cumbres", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
-        { name: "Vilchez", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
-        { name: "Talca Paris y Londres", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
-        { name: "Buses ContiMar", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
-        { name: "Eme Bus", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
-        { name: "Cacem", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
-        { name: "Buses JAC", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
-        { name: "Transmax", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
-        { name: "Cruz del Sur", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
-        { name: "Zona Sur", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
-        { name: "Transchiloé", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
-      ];
+  // Seeding Initial Transports and Enforcing Complete Commune Coverage
+  try {
+    db.exec('DELETE FROM transports;');
+    console.log('[SEED] Cleaned transports table to enforce complete coverage migration.');
+  } catch (err: any) {
+    console.error('Failed to clear transports:', err.message);
+  }
 
-      baseTransports.forEach(t => {
-        transportMap[t.name] = {
-          id: uuidv4(),
-          nombre: t.name,
-          regiones: [] as string[],
-          comunas: [] as string[],
-          tipoServicio: t.type,
-          costoBase: t.cost,
-          costoPorFardo: Math.round(t.cost * 0.2),
-          tarifaReferencia: t.tarifaRef,
-          tiempoEntrega: t.time,
-          telefono: "+56900000000",
-          email: `contacto@${t.name.toLowerCase().replace(/\s/g, '')}.cl`,
-          activo: 1,
-          createdAt: new Date().toISOString(),
-        };
-      });
+  console.log('Seeding initial transports with complete coverage...');
+  
+  const generateInitialTransports = () => {
+    const transportMap: Record<string, any> = {};
+    const baseTransports = [
+      { name: "Starken", type: "normal", cost: 4000, time: "24-72 hrs", tarifaRef: "" },
+      { name: "Pullman Cargo", type: "cargo", cost: 5000, time: "48-96 hrs", tarifaRef: "" },
+      { name: "Blue Express", type: "express", cost: 3500, time: "24-48 hrs", tarifaRef: "" },
+      { name: "Varmontt", type: "normal", cost: 4500, time: "24-48 hrs", tarifaRef: "" },
+      { name: "Transportes Regionales", type: "cargo", cost: 6000, time: "72+ hrs", tarifaRef: "" },
+      { name: "Correos de Chile", type: "normal", cost: 3000, time: "48-72 hrs", tarifaRef: "" },
+      { name: "Rapa Nui Cargo", type: "cargo", cost: 15000, time: "7-14 días", tarifaRef: "" },
+      { name: "Aricargo", type: "cargo", cost: 21000, time: "48-72 hrs", tarifaRef: "$18.000 - $24.000" },
+      { name: "JT", type: "normal", cost: 18000, time: "48-72 hrs", tarifaRef: "$16.000 - $20.000" },
+      { name: "Transportes Barrios", type: "cargo", cost: 14500, time: "48-72 hrs", tarifaRef: "$13.000 - $16.000" },
+      { name: "Transcargo", type: "cargo", cost: 5000, time: "48-72 hrs", tarifaRef: "" },
+      { name: "CyC", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
+      { name: "Ate", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
+      { name: "Mundaca", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
+      { name: "Chevalier", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
+      { name: "Diabama", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
+      { name: "Manques", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
+      { name: "Villa Prat", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
+      { name: "G&P (Gulliver)", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
+      { name: "TVP (Valle Puangue)", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
+      { name: "Pullman Bus", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
+      { name: "Envias Cargo", type: "cargo", cost: 5000, time: "48-72 hrs", tarifaRef: "" },
+      { name: "Ecomex", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
+      { name: "5 Sur", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
+      { name: "Transantin", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
+      { name: "Condor Bus", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
+      { name: "Buses Nilahue", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
+      { name: "Andimar", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
+      { name: "Pullman del Sur", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
+      { name: "Altas Cumbres", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
+      { name: "Vilchez", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
+      { name: "Talca Paris y Londres", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
+      { name: "Buses ContiMar", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
+      { name: "Eme Bus", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
+      { name: "Cacem", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
+      { name: "Buses JAC", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
+      { name: "Transmax", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
+      { name: "Cruz del Sur", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
+      { name: "Zona Sur", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
+      { name: "Transchiloé", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
+    ];
 
-      COMMUNES_CHILE.forEach(item => {
-        const transports = getTransportsForCommune(item.r, item.c);
-        transports.forEach(tName => {
-          if (transportMap[tName]) {
-            if (!transportMap[tName].regiones.includes(item.r)) {
-              transportMap[tName].regiones.push(item.r);
-            }
-            if (!transportMap[tName].comunas.includes(item.c)) {
-              transportMap[tName].comunas.push(item.c);
-            }
+    baseTransports.forEach(t => {
+      transportMap[t.name] = {
+        id: uuidv4(),
+        nombre: t.name,
+        regiones: [] as string[],
+        comunas: [] as string[],
+        tipoServicio: t.type,
+        costoBase: t.cost,
+        costoPorFardo: Math.round(t.cost * 0.2),
+        tarifaReferencia: t.tarifaRef,
+        tiempoEntrega: t.time,
+        telefono: "+56900000000",
+        email: `contacto@${t.name.toLowerCase().replace(/\s/g, '')}.cl`,
+        activo: 1,
+        createdAt: new Date().toISOString(),
+      };
+    });
+
+    COMMUNES_CHILE.forEach(item => {
+      const transports = getTransportsForCommune(item.r, item.c);
+      transports.forEach(tName => {
+        if (transportMap[tName]) {
+          if (!transportMap[tName].regiones.includes(item.r)) {
+            transportMap[tName].regiones.push(item.r);
           }
-        });
+          if (!transportMap[tName].comunas.includes(item.c)) {
+            transportMap[tName].comunas.push(item.c);
+          }
+        }
       });
+    });
 
-      return Object.values(transportMap);
-    };
-
-    const initialTransports = generateInitialTransports();
-    const insertTransport = db.prepare(`
-      INSERT INTO transports (
-        id, nombre, regiones, comunas, tipoServicio, costoBase, costoPorFardo,
-        tarifaReferencia, tiempoEntrega, telefono, email, activo, createdAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    const transInsertTransports = db.transaction((transports) => {
-      for (const t of transports) {
-        insertTransport.run(
-          t.id,
-          t.nombre,
-          JSON.stringify(t.regiones),
-          JSON.stringify(t.comunas),
-          t.tipoServicio,
-          t.costoBase,
-          t.costoPorFardo,
-          t.tarifaReferencia,
-          t.tiempoEntrega,
-          t.telefono,
-          t.email,
-          t.activo,
-          t.createdAt
-        );
+    // Provide complete national coverage for any transports not explicitly restricted by region mapping
+    const allRegions = Array.from(new Set(COMMUNES_CHILE.map(c => c.r)));
+    const allCommunes = COMMUNES_CHILE.map(c => c.c);
+    
+    Object.keys(transportMap).forEach(key => {
+      if (transportMap[key].comunas.length === 0) {
+        transportMap[key].regiones = [...allRegions];
+        transportMap[key].comunas = [...allCommunes];
       }
     });
-    
-    transInsertTransports(initialTransports);
-    console.log('Seeded', initialTransports.length, 'transports.');
-  }
+
+    return Object.values(transportMap);
+  };
+
+  const initialTransports = generateInitialTransports();
+  const insertTransport = db.prepare(`
+    INSERT INTO transports (
+      id, nombre, regiones, comunas, tipoServicio, costoBase, costoPorFardo,
+      tarifaReferencia, tiempoEntrega, telefono, email, activo, createdAt
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const transInsertTransports = db.transaction((transports) => {
+    for (const t of transports) {
+      insertTransport.run(
+        t.id,
+        t.nombre,
+        JSON.stringify(t.regiones),
+        JSON.stringify(t.comunas),
+        t.tipoServicio,
+        t.costoBase,
+        t.costoPorFardo,
+        t.tarifaReferencia,
+        t.tiempoEntrega,
+        t.telefono,
+        t.email,
+        t.activo,
+        t.createdAt
+      );
+    }
+  });
+  
+  transInsertTransports(initialTransports);
+  console.log('Seeded', initialTransports.length, 'transports.');
 
   // Seeding Initial Shipments if Empty
   const shipmentCountRes = db.prepare('SELECT count(*) as count FROM shipments').get() as { count: number };
