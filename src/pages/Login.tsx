@@ -9,7 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 
 const loginSchema = z.object({
   email: z.string().email('Email inválido'),
-  password: z.string().min(6, 'La contraseña debe tener al menos 6 caracteres'),
+  password: z.string().min(4, 'La contraseña debe tener al menos 4 caracteres'),
 });
 
 type LoginForm = z.infer<typeof loginSchema>;
