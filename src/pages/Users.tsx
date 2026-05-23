@@ -12,7 +12,7 @@ import { cn } from '../lib/utils';
 
 const createUserSchema = z.object({
   nombre: z.string().min(2, 'Nombre requerido'),
-  email: z.string().email('Email inválido'),
+  email: z.string().min(3, 'Usuario o Email requerido (mínimo 3 caracteres)'),
   password: z.string().min(4, 'Mínimo 4 caracteres'),
   rol: z.enum(['admin', 'operador']),
 });
@@ -343,12 +343,12 @@ function AddUserModalForm({ onClose, onSuccess }: { onClose: () => void, onSucce
       </div>
       
       <div>
-        <label className="block text-slate-700 mb-1.5 font-bold text-xs uppercase tracking-wider">Email de Acceso</label>
+        <label className="block text-slate-700 mb-1.5 font-bold text-xs uppercase tracking-wider">Nombre de Usuario (o correo)</label>
         <input 
           {...register('email')} 
-          type="email" 
+          type="text" 
           className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl focus:bg-white focus:border-purple-400 focus:ring-4 focus:ring-purple-100 outline-none transition-all placeholder-slate-450" 
-          placeholder="Ej: camilo@ejemplo.cl" 
+          placeholder="Ej: camilo o camilo@correo.cl" 
         />
         {errors.email && <p className="text-rose-500 text-xs font-bold mt-1.5">{errors.email.message}</p>}
       </div>

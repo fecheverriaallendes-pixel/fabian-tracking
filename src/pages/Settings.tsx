@@ -10,7 +10,7 @@ import { z } from 'zod';
 
 const createUserSchema = z.object({
   nombre: z.string().min(2, 'Nombre requerido'),
-  email: z.string().email('Email inválido'),
+  email: z.string().min(3, 'Usuario o Email requerido (mínimo 3 caracteres)'),
   password: z.string().min(4, 'Mínimo 4 caracteres'),
   rol: z.enum(['admin', 'operador']),
 });
@@ -421,12 +421,12 @@ function AddUserModalInline({ onClose, onSuccess }: { onClose: () => void, onSuc
           </div>
           
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Email (Usuario de Ingreso)</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Nombre de Usuario (o correo)</label>
             <input 
               {...register('email')} 
-              type="email" 
+              type="text" 
               className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-mono" 
-              placeholder="Ej: nicolas@empresa.cl" 
+              placeholder="Ej: nicolas o nicolas@empresa.cl" 
             />
             {errors.email && <p className="text-red-500 text-xs mt-1 font-medium">{errors.email.message}</p>}
           </div>

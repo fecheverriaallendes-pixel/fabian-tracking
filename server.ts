@@ -78,33 +78,33 @@ async function startServer() {
     }
   }
 
-  // Seeding & Enforcing Initial Users
+  // Seeding & Enforcing Clean Username-based Users
+  // Wipe all old email-based records to guarantee clean migration as requested
+  try {
+    db.exec('DELETE FROM users;');
+    console.log('[AUTH DB] Cleaned existing users table for username-based login migration.');
+  } catch (err: any) {
+    console.error('Failed to clear users table:', err.message);
+  }
+
   const INITIAL_USERS = [
-    { uid: '1', email: 'admin@logitrack.com', nombre: 'Admin User', rol: 'admin', password: '2024' },
-    { uid: '2', email: 'operador@logitrack.com', nombre: 'Operador User', rol: 'operador', password: 'password123' },
-    { uid: '3', email: 'master@logitrack.com', nombre: 'Administrador Maestro', rol: 'admin', password: '2024' },
-    { uid: '4', email: 'f.echeverria.allendes@gmail.com', nombre: 'Fabián Maestro', rol: 'admin', password: '2024' },
+    { uid: 'fabian', email: 'fabian', nombre: 'Fabián Maestro', rol: 'admin', password: '2024' },
+    { uid: 'admin', email: 'admin', nombre: 'Administrador', rol: 'admin', password: '2024' },
+    { uid: 'operador', email: 'operador', nombre: 'Operador User', rol: 'operador', password: '2024' },
+    { uid: 'master', email: 'master', nombre: 'Administrador Maestro', rol: 'admin', password: '2024' },
   ];
 
-  const checkUserExists = db.prepare('SELECT uid FROM users WHERE email = ?');
   const insertUser = db.prepare('INSERT INTO users (uid, email, nombre, rol, password) VALUES (?, ?, ?, ?, ?)');
-  const updatePassword = db.prepare('UPDATE users SET password = ? WHERE uid = ?');
 
   const transInsert = db.transaction((users) => {
     for (const u of users) {
-      const existing = checkUserExists.get(u.email) as { uid: string } | undefined;
-      if (!existing) {
-        insertUser.run(u.uid, u.email, u.nombre, u.rol, u.password);
-        console.log(`Seeded initial user: ${u.email}`);
-      } else {
-        // Enforce the designated master password so the user is never locked out
-        updatePassword.run(u.password, existing.uid);
-      }
+      insertUser.run(u.uid, u.email, u.nombre, u.rol, u.password);
+      console.log(`[AUTH DB] Seeded username-based account: "${u.email}" (Password: "${u.password}")`);
     }
   });
   
   transInsert(INITIAL_USERS);
-  console.log('Seeded and synchronized default users successfully.');
+  console.log('Seeded and synchronized username-based default users successfully.');
 
   // Seeding Initial Transports if Empty
   const transportCountRes = db.prepare('SELECT count(*) as count FROM transports').get() as { count: number };

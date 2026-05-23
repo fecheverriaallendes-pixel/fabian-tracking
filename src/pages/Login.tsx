@@ -4,12 +4,12 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Loader2, Truck, Lock, Mail, Sparkles } from 'lucide-react';
+import { Loader2, Truck, Lock, Sparkles, User as UserIcon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { motion } from 'motion/react';
 
 const loginSchema = z.object({
-  email: z.string().email('Email inválido'),
+  email: z.string().min(3, 'El usuario debe tener al menos 3 caracteres'),
   password: z.string().min(4, 'La contraseña debe tener al menos 4 caracteres'),
 });
 
@@ -111,16 +111,16 @@ export default function Login() {
               transition={{ delay: 0.4 }}
               className="space-y-1.5"
             >
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">Correo Electrónico</label>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">Usuario del Sistema</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                  <Mail className="h-4.5 w-4.5" />
+                  <UserIcon className="h-4.5 w-4.5 text-blue-400" />
                 </div>
                 <input
                   {...register('email')}
-                  type="email"
+                  type="text"
                   className="w-full bg-slate-950/70 border border-slate-800 focus:border-blue-500/80 text-white rounded-xl pl-11 pr-4 py-3 text-sm focus:ring-2 focus:ring-blue-500/10 transition-all outline-none font-medium placeholder-slate-600"
-                  placeholder="ejemplo@empresa.com"
+                  placeholder="Ej: fabian o admin"
                 />
               </div>
               {errors.email && <p className="text-rose-500 text-xs font-semibold mt-1">{errors.email.message}</p>}
