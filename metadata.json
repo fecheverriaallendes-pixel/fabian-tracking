@@ -1,5 +1,6 @@
 {
   "name": "FABIAN - TRACK",
   "description": "Professional transport and shipment management system with Firebase integration.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

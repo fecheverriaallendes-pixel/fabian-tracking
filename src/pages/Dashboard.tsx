@@ -113,10 +113,10 @@ export default function Dashboard() {
             <Sparkles className="w-3.5 h-3.5 mr-1 animate-pulse text-blue-400" />
             Portal del Transportes
           </div>
-          <h1 className="text-4xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-200">
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
             ¡Hola, {user?.nombre || 'Bienvenido'}! 👋
           </h1>
-          <p className="text-slate-400 text-sm max-w-xl">
+          <p className="text-slate-300 text-sm max-w-xl">
             Este es tu portal ágil de consultas de cobertura y tarifas de transportes terrestres, aéreos y de carga a nivel nacional.
           </p>
         </div>
@@ -125,7 +125,7 @@ export default function Dashboard() {
           <Calendar className="w-4 h-4 text-slate-400" />
           <div className="text-right">
             <p className="text-[10px] text-slate-500 font-extrabold uppercase tracking-wider">Hoy</p>
-            <p className="text-xs text-slate-105 font-semibold">{new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' })}</p>
+            <p className="text-xs text-slate-200 font-semibold">{new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' })}</p>
           </div>
         </div>
       </div>
