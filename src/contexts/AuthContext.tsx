@@ -34,16 +34,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const login = async (email: string, password?: string) => {
     if (!password) {
-      // Fallback for dev/legacy if needed, or just fail
-      throw new Error('Password required');
+      throw new Error('La contraseña es requerida');
     }
 
     const user = await dbService.verifyUser(email, password);
-    
-    if (!user) {
-      throw new Error('Credenciales inválidas');
-    }
-
     localStorage.setItem('logitrack_session', JSON.stringify(user));
     setUser(user);
   };

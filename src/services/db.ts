@@ -11,14 +11,15 @@ export const dbService = {
     return res.json();
   },
 
-  verifyUser: async (email: string, password: string): Promise<User | null> => {
+  verifyUser: async (email: string, password: string): Promise<User> => {
     const res = await fetch('/api/users/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     });
     if (!res.ok) {
-      return null;
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.error || 'Credenciales inválidas');
     }
     return res.json();
   },

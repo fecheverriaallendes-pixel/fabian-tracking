@@ -302,23 +302,30 @@ async function startServer() {
 
   // 2. Verify User Credentials
   app.post('/api/users/verify', (req, res) => {
-    const { email, password } = req.body;
+    let { email, password } = req.body;
+    if (email) email = email.trim();
+    if (password) password = password.trim();
     console.log(`[AUTH DEBUG] Attempting verify: email="${email}", password="${password}"`);
     try {
-      const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email) as any;
+      // Find case-insensitive match for either email or uid to be extremely forgiving
+      const user = db.prepare('SELECT * FROM users WHERE LOWER(email) = LOWER(?) OR LOWER(uid) = LOWER(?)').get(email, email) as any;
       console.log(`[AUTH DEBUG] Found user in database:`, user);
+      
       if (!user) {
-        console.log(`[AUTH DEBUG] User not found for email: ${email}`);
-        return res.status(401).json({ error: 'Credenciales inválidas' });
+        console.log(`[AUTH DEBUG] User not found for: ${email}`);
+        return res.status(401).json({ error: 'Usuario no encontrado' });
       }
-      // Simple password check matching mock database
-      const match = user.password === password || (!user.password && password === 'password123');
-      console.log(`[AUTH DEBUG] Password matches: ${match} (user.password="${user.password}", input.password="${password}")`);
+      
+      // Password check matching database
+      const match = String(user.password).trim() === String(password).trim() || (!user.password && String(password).trim() === '2024');
+      console.log(`[AUTH DEBUG] Password check: match=${match} (user.password="${user.password}", input.password="${password}")`);
+      
       if (match) {
         const { password: _, ...safeUser } = user;
         return res.json(safeUser);
       }
-      res.status(401).json({ error: 'Credenciales inválidas' });
+      
+      res.status(401).json({ error: 'La contraseña ingresada es incorrecta' });
     } catch (error: any) {
       console.error(`[AUTH DEBUG] Error in verifyUser:`, error);
       res.status(500).json({ error: error.message });
