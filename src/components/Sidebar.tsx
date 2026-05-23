@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Truck, Package, Users, Settings, LogOut, Search } from 'lucide-react';
+import { LayoutDashboard, Truck, Package, Users, Settings, LogOut, Search, X } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -7,21 +7,37 @@ const navItems = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Cobertura', href: '/cobertura', icon: Search },
   { name: 'Transportes', href: '/transportes', icon: Truck },
-  { name: 'Despachos', href: '/despachos', icon: Package },
   { name: 'Usuarios', href: '/usuarios', icon: Users, adminOnly: true },
   { name: 'Configuración', href: '/configuracion', icon: Settings },
 ];
 
-export function Sidebar() {
+interface SidebarProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const location = useLocation();
   const { user, logout } = useAuth();
 
   return (
-    <div className="flex flex-col h-full bg-slate-900 text-white w-64 fixed left-0 top-0 bottom-0 shadow-xl z-50">
-      <div className="p-6 border-b border-slate-800">
-        <h1 className="text-xl font-bold tracking-tight text-blue-600">FABIAN - TRACK</h1>
-        <span className="text-xs font-medium text-slate-500">Info transporte</span>
-        <p className="text-xs text-slate-400 mt-1">Gestión de Logística</p>
+    <div className={cn(
+      "flex flex-col h-full bg-slate-900 text-white w-64 fixed left-0 top-0 bottom-0 shadow-xl z-50 transition-transform duration-300 ease-in-out md:translate-x-0",
+      isOpen ? "translate-x-0" : "-translate-x-full"
+    )}>
+      <div className="p-6 border-b border-slate-800 flex justify-between items-center">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight text-blue-500">FABIAN - TRACK</h1>
+          <span className="text-xs font-medium text-slate-500">Info transporte</span>
+          <p className="text-xs text-slate-400 mt-1">Gestión de Logística</p>
+        </div>
+        <button
+          onClick={onClose}
+          className="md:hidden p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-all"
+          title="Cerrar menú"
+        >
+          <X className="w-5 h-5" />
+        </button>
       </div>
 
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
@@ -33,6 +49,7 @@ export function Sidebar() {
             <Link
               key={item.name}
               to={item.href}
+              onClick={onClose}
               className={cn(
                 "flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors group",
                 isActive 
@@ -54,7 +71,7 @@ export function Sidebar() {
           </div>
           <div className="ml-3">
             <p className="text-sm font-medium text-white">{user?.nombre}</p>
-            <p className="text-xs text-slate-400 capitalize">{user?.rol}</p>
+            <p className="text-xs text-slate-405 capitalize">{user?.rol}</p>
           </div>
         </div>
         <button

@@ -11,7 +11,6 @@ import { Layout } from './components/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Transports from './pages/Transports';
-import Shipments from './pages/Shipments';
 import Users from './pages/Users';
 import CoverageSearch from './pages/CoverageSearch';
 import Settings from './pages/Settings';
@@ -28,7 +27,6 @@ function App() {
               <Route path="/" element={<Dashboard />} />
               <Route path="/cobertura" element={<CoverageSearch />} />
               <Route path="/transportes" element={<Transports />} />
-              <Route path="/despachos" element={<Shipments />} />
               <Route path="/usuarios" element={<Users />} />
               <Route path="/configuracion" element={<Settings />} />
               <Route path="*" element={<Navigate to="/" replace />} />
