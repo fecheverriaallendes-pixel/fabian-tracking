@@ -79,19 +79,19 @@ async function startServer() {
   }
 
   // Seeding & Enforcing Clean Username-based Users
-  // Wipe all old email-based records to guarantee clean migration as requested
+  // Wipe all old records to guarantee clean migration as requested
   try {
     db.exec('DELETE FROM users;');
-    console.log('[AUTH DB] Cleaned existing users table for username-based login migration.');
+    console.log('[AUTH DB] Cleaned existing users table for flexible login migration.');
   } catch (err: any) {
     console.error('Failed to clear users table:', err.message);
   }
 
   const INITIAL_USERS = [
-    { uid: 'fabian', email: 'fabian', nombre: 'Fabián Maestro', rol: 'admin', password: '2024' },
-    { uid: 'admin', email: 'admin', nombre: 'Administrador', rol: 'admin', password: '2024' },
-    { uid: 'operador', email: 'operador', nombre: 'Operador User', rol: 'operador', password: '2024' },
-    { uid: 'master', email: 'master', nombre: 'Administrador Maestro', rol: 'admin', password: '2024' },
+    { uid: 'fabian', email: 'f.echeverria.allendes@gmail.com', nombre: 'Fabián Maestro', rol: 'admin', password: '2024' },
+    { uid: 'admin', email: 'admin@logitrack.com', nombre: 'Administrador', rol: 'admin', password: '2024' },
+    { uid: 'operador', email: 'operador@logitrack.com', nombre: 'Operador User', rol: 'operador', password: '2024' },
+    { uid: 'master', email: 'master@logitrack.com', nombre: 'Administrador Maestro', rol: 'admin', password: '2024' },
   ];
 
   const insertUser = db.prepare('INSERT INTO users (uid, email, nombre, rol, password) VALUES (?, ?, ?, ?, ?)');
@@ -99,12 +99,12 @@ async function startServer() {
   const transInsert = db.transaction((users) => {
     for (const u of users) {
       insertUser.run(u.uid, u.email, u.nombre, u.rol, u.password);
-      console.log(`[AUTH DB] Seeded username-based account: "${u.email}" (Password: "${u.password}")`);
+      console.log(`[AUTH DB] Seeded flexible account: username="${u.uid}" email="${u.email}" (Password: "${u.password}")`);
     }
   });
   
   transInsert(INITIAL_USERS);
-  console.log('Seeded and synchronized username-based default users successfully.');
+  console.log('Seeded and synchronized flexible default users successfully.');
 
   // Seeding Initial Transports if Empty
   const transportCountRes = db.prepare('SELECT count(*) as count FROM transports').get() as { count: number };
