@@ -59,6 +59,25 @@ async function startServer() {
     );
   `);
 
+  // Safe Database Migrations for schema stability (since SQLite doesn't update column lists dynamically on existing tables)
+  try {
+    db.exec('ALTER TABLE users ADD COLUMN password TEXT;');
+    console.log('[SCHEMA MIGRATION] "password" column added successfully to "users" table.');
+  } catch (err: any) {
+    if (!err.message.includes('duplicate column name') && !err.message.includes('already exists')) {
+      console.warn('[SCHEMA MIGRATION] Note on "users.password" column check:', err.message);
+    }
+  }
+
+  try {
+    db.exec('ALTER TABLE shipments ADD COLUMN createdBy TEXT;');
+    console.log('[SCHEMA MIGRATION] "createdBy" column added successfully to "shipments" table.');
+  } catch (err: any) {
+    if (!err.message.includes('duplicate column name') && !err.message.includes('already exists')) {
+      console.warn('[SCHEMA MIGRATION] Note on "shipments.createdBy" column check:', err.message);
+    }
+  }
+
   // Seeding & Enforcing Initial Users
   const INITIAL_USERS = [
     { uid: '1', email: 'admin@logitrack.com', nombre: 'Admin User', rol: 'admin', password: '2024' },
@@ -284,18 +303,24 @@ async function startServer() {
   // 2. Verify User Credentials
   app.post('/api/users/verify', (req, res) => {
     const { email, password } = req.body;
+    console.log(`[AUTH DEBUG] Attempting verify: email="${email}", password="${password}"`);
     try {
       const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email) as any;
+      console.log(`[AUTH DEBUG] Found user in database:`, user);
       if (!user) {
+        console.log(`[AUTH DEBUG] User not found for email: ${email}`);
         return res.status(401).json({ error: 'Credenciales inválidas' });
       }
       // Simple password check matching mock database
-      if (user.password === password || (!user.password && password === 'password123')) {
+      const match = user.password === password || (!user.password && password === 'password123');
+      console.log(`[AUTH DEBUG] Password matches: ${match} (user.password="${user.password}", input.password="${password}")`);
+      if (match) {
         const { password: _, ...safeUser } = user;
         return res.json(safeUser);
       }
       res.status(401).json({ error: 'Credenciales inválidas' });
     } catch (error: any) {
+      console.error(`[AUTH DEBUG] Error in verifyUser:`, error);
       res.status(500).json({ error: error.message });
     }
   });
