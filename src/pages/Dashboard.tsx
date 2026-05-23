@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { dbService } from '../services/db';
-import { Truck, MapPin, Search, Mail, Phone, Clock, Sparkles, Calendar, ArrowRight, ShieldCheck, LayoutDashboard } from 'lucide-react';
-import { formatCurrency } from '../lib/utils';
+import { Truck, MapPin, Search, Mail, Phone, Clock, Sparkles, Calendar, ArrowRight, ShieldCheck, LayoutDashboard, X, Copy } from 'lucide-react';
+import { formatCurrency, cn } from '../lib/utils';
 import { Transport } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
+import { COMMUNES_CHILE } from '../lib/chile-data';
+import { toast } from 'sonner';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -21,6 +23,41 @@ export default function Dashboard() {
     cargoCount: 0,
   });
   const [loading, setLoading] = useState(true);
+
+  // States for integrated coverage search
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedComuna, setSelectedComuna] = useState<{c: string, r: string} | null>(null);
+  const [availableTransports, setAvailableTransports] = useState<Transport[]>([]);
+
+  // Filter communes based on search term
+  const filteredCommunes = useMemo(() => {
+    if (!searchTerm || selectedComuna) return [];
+    const term = searchTerm.toLowerCase();
+    return COMMUNES_CHILE.filter(c => 
+      c.c.toLowerCase().includes(term)
+    ).slice(0, 5); // Limit to 5 results for ultra-fast response on mobile
+  }, [searchTerm, selectedComuna]);
+
+  // Update available transports when selectedComuna changes
+  useEffect(() => {
+    if (selectedComuna && transportsList.length > 0) {
+      const filtered = transportsList.filter(t => t.comunas.includes(selectedComuna.c) && t.activo);
+      setAvailableTransports(filtered);
+    } else {
+      setAvailableTransports([]);
+    }
+  }, [selectedComuna, transportsList]);
+
+  const handleSelectCommune = (commune: {c: string, r: string}) => {
+    setSelectedComuna(commune);
+    setSearchTerm(commune.c);
+  };
+
+  const clearSearch = () => {
+    setSearchTerm('');
+    setSelectedComuna(null);
+    setAvailableTransports([]);
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -195,26 +232,166 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Main Interactive Call-To-Action to check coverage */}
+      {/* Integrated Live Search Engine Block */}
       <motion.div 
         variants={itemVariants}
-        onClick={() => navigate('/cobertura')}
-        className="bg-gradient-to-r from-blue-600 to-indigo-700 p-8 rounded-3xl text-white shadow-lg overflow-hidden relative cursor-pointer group hover:scale-[1.01] active:scale-[0.99] transition-all"
+        className="bg-slate-900 rounded-3xl text-white shadow-xl border border-slate-800 p-6 md:p-8 relative overflow-hidden"
       >
-        <div className="absolute top-0 right-0 p-1 bg-gradient-to-l from-white/10 to-transparent w-80 h-80 rounded-full blur-2xl pointer-events-none" />
-        <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-          <div className="space-y-2">
-            <div className="inline-flex items-center space-x-1.5 bg-white/10 px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-widest text-blue-200">
-              <Search className="w-3 h-3" />
-              <span>Buscador Rápido</span>
+        {/* Decorative ambient blurs */}
+        <div className="absolute top-0 right-0 p-1 bg-gradient-to-bl from-blue-500/10 via-transparent to-transparent w-72 h-72 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-16 -left-16 bg-indigo-500/10 w-72 h-72 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="relative z-10 space-y-6">
+          <div className="space-y-1.5">
+            <div className="inline-flex items-center space-x-1.5 bg-blue-500/10 text-blue-400 px-3.5 py-1.5 rounded-full text-xs font-bold tracking-wider uppercase border border-blue-500/20">
+              <Search className="w-3.5 h-3.5 text-blue-400" />
+              <span>Buscador de Cobertura Express</span>
             </div>
-            <h2 className="text-2xl font-black tracking-tight">Buscar Cobertura por Ciudad</h2>
-            <p className="text-blue-100 text-sm max-w-xl font-medium">
-              ¿Quieres saber qué tarifas de fardo u opciones de transporte llegan a una ciudad en específico? Ingresa la comuna aquí para verificar tarifas y transportes disponibles al instante.
+            <h2 className="text-2xl md:text-3xl font-black tracking-tight text-white">Consulta Directa por Comuna</h2>
+            <p className="text-slate-300 text-sm max-w-xl font-medium">
+              Escribe la ciudad o comuna de Chile para ver de inmediato los transportes con cobertura y tarifas autorizadas.
             </p>
           </div>
-          <div className="bg-white/10 group-hover:bg-white/20 p-4 rounded-2xl transition-all self-end md:self-auto flex items-center justify-center border border-white/20">
-            <ArrowRight className="w-6 h-6 text-white group-hover:translate-x-1.5 transition-transform" />
+
+          <div className="relative max-w-xl">
+            <div className="relative group">
+              <div className="absolute inset-0 bg-blue-500/10 rounded-2xl blur group-focus-within:blur-md opacity-50 transition-all pointer-events-none" />
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5 pointer-events-none" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  if (selectedComuna && e.target.value !== selectedComuna.c) {
+                    setSelectedComuna(null);
+                  }
+                }}
+                placeholder="Escribe la comuna. Ej: Puente Alto, Concepción..."
+                className="w-full pl-12 pr-12 py-3.5 bg-slate-950/80 text-white rounded-2xl border border-slate-800 focus:border-blue-500/50 focus:outline-none focus:ring-4 focus:ring-blue-500/10 text-sm placeholder-slate-500 transition-all font-medium"
+              />
+              {searchTerm && (
+                <button 
+                  onClick={clearSearch}
+                  className="absolute right-4 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-white p-1 rounded-full hover:bg-slate-800 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Live Autocomplete suggestions */}
+            <AnimatePresence>
+              {!selectedComuna && filteredCommunes.length > 0 && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  className="absolute top-full left-0 right-0 mt-2 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden z-50 p-1.5 space-y-0.5"
+                >
+                  {filteredCommunes.map((commune) => (
+                    <button
+                      key={`${commune.c}-${commune.r}`}
+                      onClick={() => handleSelectCommune(commune)}
+                      className="w-full text-left px-3.5 py-2.5 hover:bg-slate-800 flex items-center justify-between group rounded-xl transition-all"
+                    >
+                      <span className="font-semibold text-slate-200 group-hover:text-blue-400 transition-colors text-sm">
+                        {commune.c}
+                      </span>
+                      <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 bg-slate-800 px-2 py-0.5 rounded group-hover:bg-blue-950 group-hover:text-blue-400 transition-all">
+                        {commune.r}
+                      </span>
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Results Area */}
+          <div className="space-y-4 pt-1">
+            {selectedComuna ? (
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs uppercase font-extrabold tracking-widest text-slate-400">Cobertura en:</span>
+                    <h3 className="text-base font-black text-blue-400 px-3 py-1 bg-blue-500/10 rounded-full border border-blue-500/20 inline-block">
+                      {selectedComuna.c}
+                    </h3>
+                  </div>
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 self-start sm:self-auto">
+                    {selectedComuna.r}
+                  </span>
+                </div>
+
+                {availableTransports.length === 0 ? (
+                  <div className="text-center py-6 bg-slate-950/40 rounded-2xl border border-slate-800/80">
+                    <Truck className="mx-auto h-8 w-8 text-slate-600 mb-1.5 stroke-[1.5]" />
+                    <p className="text-sm font-semibold text-slate-300">Sin cobertura directa</p>
+                    <p className="text-xs text-slate-500 mt-0.5">No hay transportistas activos registrados para esta comuna.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {availableTransports.map((transport) => (
+                      <div 
+                        key={transport.id}
+                        className="bg-slate-950/60 rounded-2xl border border-slate-800 hover:border-blue-500/40 transition-all p-4.5 flex flex-col justify-between space-y-4"
+                      >
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-start">
+                            <h4 className="text-sm font-black tracking-tight text-white uppercase truncate max-w-[140px]">{transport.nombre}</h4>
+                            <span className={cn(
+                              "text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border shrink-0",
+                              transport.tipoServicio === 'express' ? "bg-purple-500/10 text-purple-400 border-purple-500/20" :
+                              transport.tipoServicio === 'cargo' ? "bg-orange-500/10 text-orange-400 border-orange-500/20" :
+                              "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                            )}>
+                              {transport.tipoServicio}
+                            </span>
+                          </div>
+
+                          <div className="space-y-1.5 text-xs font-semibold text-slate-300 bg-slate-900/50 rounded-xl p-3 border border-slate-800/50">
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-550 text-[10px]">T. Estimado</span>
+                              <span className="text-slate-100 font-bold">{transport.tiempoEntrega}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-550 text-[10px]">Costo Base</span>
+                              <span className="text-blue-400 font-black font-mono">
+                                {transport.tarifaReferencia || formatCurrency(transport.costoBase)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const costo = transport.tarifaReferencia || formatCurrency(transport.costoBase);
+                            const text = `✅ *${transport.nombre}* llega a *${selectedComuna.c}*\n⏱ Tiempo: ${transport.tiempoEntrega}\n💰 Costo ref: ${costo}`;
+                            navigator.clipboard.writeText(text);
+                            toast.success(`Datos de ${transport.nombre} copiados al portapapeles`);
+                          }}
+                          className="w-full py-2.5 text-[10px] font-black text-blue-400 bg-blue-500/10 rounded-xl hover:bg-blue-600 hover:text-white hover:shadow-lg hover:shadow-blue-600/10 transition-all active:scale-95 flex items-center justify-center space-x-1.5 border border-blue-500/20"
+                        >
+                          <Copy className="w-3 h-3" />
+                          <span>Copiar Ficha Logística</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center space-x-3.5 bg-slate-950/40 p-4.5 rounded-2xl border border-slate-800">
+                <div className="w-9 h-9 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-400 shrink-0">
+                  <MapPin className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-slate-200">¿Estás buscando a dónde enviar?</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">La base de datos nacional cubre {stats.uniqueCommunes} comunas activas de Chile.</p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </motion.div>
