@@ -59,25 +59,33 @@ async function startServer() {
     );
   `);
 
-  // Seeding Initial Users if Empty
-  const userCountRes = db.prepare('SELECT count(*) as count FROM users').get() as { count: number };
-  if (userCountRes.count === 0) {
-    const INITIAL_USERS = [
-      { uid: '1', email: 'admin@logitrack.com', nombre: 'Admin User', rol: 'admin', password: '2024' },
-      { uid: '2', email: 'operador@logitrack.com', nombre: 'Operador User', rol: 'operador', password: 'password123' },
-      { uid: '3', email: 'master@logitrack.com', nombre: 'Administrador Maestro', rol: 'admin', password: '2024' },
-      { uid: '4', email: 'f.echeverria.allendes@gmail.com', nombre: 'Fabián Maestro', rol: 'admin', password: '2024' },
-    ];
+  // Seeding & Enforcing Initial Users
+  const INITIAL_USERS = [
+    { uid: '1', email: 'admin@logitrack.com', nombre: 'Admin User', rol: 'admin', password: '2024' },
+    { uid: '2', email: 'operador@logitrack.com', nombre: 'Operador User', rol: 'operador', password: 'password123' },
+    { uid: '3', email: 'master@logitrack.com', nombre: 'Administrador Maestro', rol: 'admin', password: '2024' },
+    { uid: '4', email: 'f.echeverria.allendes@gmail.com', nombre: 'Fabián Maestro', rol: 'admin', password: '2024' },
+  ];
 
-    const insertUser = db.prepare('INSERT INTO users (uid, email, nombre, rol, password) VALUES (?, ?, ?, ?, ?)');
-    const transInsert = db.transaction((users) => {
-      for (const u of users) {
+  const checkUserExists = db.prepare('SELECT uid FROM users WHERE email = ?');
+  const insertUser = db.prepare('INSERT INTO users (uid, email, nombre, rol, password) VALUES (?, ?, ?, ?, ?)');
+  const updatePassword = db.prepare('UPDATE users SET password = ? WHERE uid = ?');
+
+  const transInsert = db.transaction((users) => {
+    for (const u of users) {
+      const existing = checkUserExists.get(u.email) as { uid: string } | undefined;
+      if (!existing) {
         insertUser.run(u.uid, u.email, u.nombre, u.rol, u.password);
+        console.log(`Seeded initial user: ${u.email}`);
+      } else {
+        // Enforce the designated master password so the user is never locked out
+        updatePassword.run(u.password, existing.uid);
       }
-    });
-    transInsert(INITIAL_USERS);
-    console.log('Admin and master users seeded successfully.');
-  }
+    }
+  });
+  
+  transInsert(INITIAL_USERS);
+  console.log('Seeded and synchronized default users successfully.');
 
   // Seeding Initial Transports if Empty
   const transportCountRes = db.prepare('SELECT count(*) as count FROM transports').get() as { count: number };
