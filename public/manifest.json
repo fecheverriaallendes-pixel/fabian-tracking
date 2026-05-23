@@ -3,6 +3,7 @@
   "name": "FABIAN - TRACK",
   "description": "Sistema de gestión logístico y buscador de cobertura nacional en tiempo real.",
   "start_url": "/",
+  "scope": "/",
   "background_color": "#0b0f19",
   "theme_color": "#3b82f6",
   "display": "standalone",

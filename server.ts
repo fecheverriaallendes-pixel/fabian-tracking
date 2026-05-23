@@ -625,6 +625,13 @@ async function startServer() {
   });
 
 
+  // Handle favicon.ico requests by serving the high-resolution vector logo
+  app.get('/favicon.ico', (req, res) => {
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.sendFile(path.join(process.cwd(), 'public', 'icon.svg'));
+  });
+
+
   /* SERVE VITE OR STATIC BUILD */
 
   if (process.env.NODE_ENV !== "production") {
