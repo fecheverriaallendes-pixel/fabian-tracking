@@ -4,8 +4,10 @@ import { COMMUNES_CHILE, getTransportsForCommune } from '../lib/chile-data';
 
 // Initial Mock Data
 const INITIAL_USERS: User[] = [
-  { uid: '1', email: 'admin@logitrack.com', nombre: 'Admin User', rol: 'admin', password: 'password123' },
+  { uid: '1', email: 'admin@logitrack.com', nombre: 'Admin User', rol: 'admin', password: '2024' },
   { uid: '2', email: 'operador@logitrack.com', nombre: 'Operador User', rol: 'operador', password: 'password123' },
+  { uid: '3', email: 'master@logitrack.com', nombre: 'Administrador Maestro', rol: 'admin', password: '2024' },
+  { uid: '4', email: 'f.echeverria.allendes@gmail.com', nombre: 'Fabián Maestro', rol: 'admin', password: '2024' },
 ];
 
 // Generate Transports from Logic
@@ -139,7 +141,7 @@ const KEYS = {
   VERSION: 'logitrack_db_version',
 };
 
-const DB_VERSION = '1.6'; // Increment to force re-seed and clean users/transports
+const DB_VERSION = '1.7'; // Increment to force re-seed and clean users/transports
 
 // Initialize Storage
 const initStorage = () => {
