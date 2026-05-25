@@ -42,6 +42,20 @@ async function startServer() {
 
   app.use(express.json());
 
+  // Verify online Firestore database accessibility. If it's slower than 1.5s or blocked, fall back instantly to high-availability SQLite
+  if (useFirestore && fdb) {
+    try {
+      console.log('[FIREBASE CONNECTIVITY] Testing Firestore connection with a 1500ms timeout...');
+      const checkPromise = getDocs(collection(fdb, 'transports'));
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Unreachable/sandbox socket block')), 1500));
+      await Promise.race([checkPromise, timeoutPromise]);
+      console.log('[FIREBASE CONNECTIVITY] Firestore online DB responded successfully. Online synchronization active.');
+    } catch (err: any) {
+      console.warn('[FIREBASE CONNECTIVITY] Firestore is unresponsive/blocked. Switching permanently to local high-performance SQLite fallback:', err.message);
+      useFirestore = false;
+    }
+  }
+
   // Initialize SQLite database
   const db = new Database('sqlite.db');
 
