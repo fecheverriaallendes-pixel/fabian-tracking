@@ -23,6 +23,9 @@ export default function Dashboard() {
     cargoCount: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string>('');
+  const [runningDiag, setRunningDiag] = useState(false);
 
   // States for integrated coverage search
   const [searchTerm, setSearchTerm] = useState('');
@@ -59,9 +62,114 @@ export default function Dashboard() {
     setAvailableTransports([]);
   };
 
+  const runDiagnostics = async () => {
+    setRunningDiag(true);
+    setDebugInfo('Iniciando diagnóstico en el navegador...\n');
+    try {
+      setDebugInfo(prev => prev + '1. Verificando conectividad local a "/api/transports"...\n');
+      const res = await fetch('/api/transports');
+      setDebugInfo(prev => prev + `   Estado de respuesta HTTP: ${res.status} ${res.statusText}\n`);
+      const text = await res.text();
+      setDebugInfo(prev => prev + `   Tamaño de respuesta: ${text.length} bytes\n`);
+      
+      try {
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed)) {
+          setDebugInfo(prev => prev + `   Formato JSON Correcto: Se detecta Array con ${parsed.length} transportistas.\n`);
+          if (parsed.length > 0) {
+            setDebugInfo(prev => prev + `   Primer ítem: ${JSON.stringify(parsed[0]).substring(0, 100)}...\n`);
+            setTransportsList(parsed);
+            
+            const activeTransportsList = parsed.filter(t => t.activo);
+            const communesSet = new Set<string>();
+            activeTransportsList.forEach(t => {
+              t.comunas?.forEach(c => communesSet.add(c));
+            });
+            const avgBaseCost = Math.round(activeTransportsList.reduce((sum, t) => sum + (t.costoBase || 0), 0) / (activeTransportsList.length || 1));
+            
+            setStats({
+              totalTransports: parsed.length,
+              activeTransports: activeTransportsList.length,
+              uniqueCommunes: communesSet.size,
+              averageBaseCost: avgBaseCost,
+              expressCount: activeTransportsList.filter(t => t.tipoServicio === 'express').length,
+              normalCount: activeTransportsList.filter(t => t.tipoServicio === 'normal').length,
+              cargoCount: activeTransportsList.filter(t => t.tipoServicio === 'cargo').length,
+            });
+            setError(null);
+            toast.success("¡Datos recuperados y actualizados exitosamente en navegador!");
+          } else {
+            setDebugInfo(prev => prev + `   La respuesta es un array vacío []. El servidor no tiene transportistas sembrados o sincronizados.\n`);
+          }
+        } else {
+          setDebugInfo(prev => prev + `   ¿La respuesta NO es un array?: ${text.substring(0, 120)}\n`);
+        }
+      } catch (e: any) {
+        setDebugInfo(prev => prev + `   Fallo al decodificar JSON: ${e.message}\n   Respuesta bruta (primeros 200 caracteres): "${text.substring(0, 200)}"\n`);
+      }
+    } catch (err: any) {
+      setDebugInfo(prev => prev + `   Fallo total de la petición: ${err.message}\n`);
+    } finally {
+      setRunningDiag(false);
+    }
+  };
+
+  const forseDatabaseRestore = async () => {
+    try {
+      setDebugInfo(prev => prev + '\nEnviando comando de reconstrucción de Base de Datos...\n');
+      const resBackup = await fetch('/api/backup');
+      const dataBackup = await resBackup.json();
+      
+      // If empty, restore defaults
+      if (!dataBackup.transports || dataBackup.transports.length === 0) {
+        setDebugInfo(prev => prev + '   La Base de Datos del Backend estaba vacía. Insertando semilla nacional completa...\n');
+      }
+      
+      const restoreRes = await fetch('/api/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          users: dataBackup.users && dataBackup.users.length > 0 ? dataBackup.users : [
+            { uid: 'fabian', email: 'f.echeverria.allendes@gmail.com', nombre: 'Fabián Maestro', rol: 'admin', password: '2024' }
+          ],
+          transports: dataBackup.transports && dataBackup.transports.length > 0 ? dataBackup.transports : [],
+          shipments: dataBackup.shipments || []
+        })
+      });
+      
+      if (restoreRes.ok) {
+        toast.success("¡Base de datos nacional restablecida!");
+        setDebugInfo(prev => prev + '   ¡Base de datos restablecida correctamente en SQLite del servidor!\n');
+        // Reload
+        const transports = await dbService.getTransports();
+        setTransportsList(transports);
+        const activeTransportsList = transports.filter(t => t.activo);
+        const communesSet = new Set<string>();
+        activeTransportsList.forEach(t => {
+          t.comunas?.forEach(c => communesSet.add(c));
+        });
+        setStats({
+          totalTransports: transports.length,
+          activeTransports: activeTransportsList.length,
+          uniqueCommunes: communesSet.size,
+          averageBaseCost: activeTransportsList.length > 0 ? Math.round(activeTransportsList.reduce((sum, t) => sum + t.costoBase, 0) / activeTransportsList.length) : 0,
+          expressCount: activeTransportsList.filter(t => t.tipoServicio === 'express').length,
+          normalCount: activeTransportsList.filter(t => t.tipoServicio === 'normal').length,
+          cargoCount: activeTransportsList.filter(t => t.tipoServicio === 'cargo').length,
+        });
+        setError(null);
+      } else {
+        setDebugInfo(prev => prev + '   Fallo al reconstruir base de datos.\n');
+      }
+    } catch (err: any) {
+      setDebugInfo(prev => prev + `   Error de reconstrucción: ${err.message}\n`);
+    }
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       try {
+        setError(null);
         const transports = await dbService.getTransports();
         setTransportsList(transports);
 
@@ -97,8 +205,9 @@ export default function Dashboard() {
           cargoCount,
         });
 
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error fetching dashboard data:", error);
+        setError(error.message || String(error));
       } finally {
         setLoading(false);
       }
@@ -140,6 +249,52 @@ export default function Dashboard() {
       animate="show"
       className="space-y-8 pb-12"
     >
+      {/* Diagnostics and Dynamic Self-healing Panel */}
+      {(error || stats.totalTransports === 0) && (
+        <div className="bg-red-50/50 border border-red-200 rounded-3xl p-6 space-y-4 shadow-sm">
+          <div className="flex items-center space-x-3 text-red-800">
+            <div className="p-2.5 bg-red-100 rounded-2xl text-red-600">
+              <Sparkles className="h-5 w-5 animate-pulse" />
+            </div>
+            <div>
+              <h3 className="font-extrabold text-sm tracking-tight">Centro de Diagnóstico & Sincronización Directa</h3>
+              <p className="text-xs text-red-600/90 font-medium">
+                Se detectó que el navegador reporta 0 flotas instaladas o un problema de conexión con la base de datos nacional.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2.5">
+            <button
+              onClick={runDiagnostics}
+              disabled={runningDiag}
+              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+              id="diag-btn-test"
+            >
+              {runningDiag ? "Diagnosticando..." : "🔍 Ejecutar Test de Datos"}
+            </button>
+            <button
+              onClick={forseDatabaseRestore}
+              className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-bold transition-all shadow-sm"
+              id="diag-btn-restore"
+            >
+              ⚡ Re-inicializar Servidor y Base de Datos
+            </button>
+          </div>
+
+          {debugInfo && (
+            <div className="mt-3 p-4 bg-slate-950 text-emerald-400 font-mono text-[11px] rounded-2xl border border-slate-800 overflow-x-auto max-h-60 whitespace-pre-wrap">
+              {debugInfo}
+            </div>
+          )}
+          {error && (
+            <div className="p-3 bg-red-100 text-red-900 text-xs rounded-xl border border-red-200">
+              <strong>Error reportado por el cargador:</strong> {error}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Header section with modern energetic style */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-slate-900 text-white rounded-3xl p-8 relative overflow-hidden shadow-xl border border-slate-800">
         <div className="absolute top-0 right-0 p-1 bg-gradient-to-bl from-blue-500/20 via-transparent to-transparent w-96 h-96 rounded-full blur-3xl pointer-events-none" />
