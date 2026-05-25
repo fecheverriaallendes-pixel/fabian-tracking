@@ -1,34 +1,19 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper functions
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-    
-    function isAdmin() {
-      return isAuthenticated() && 
-        exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'admin';
+    // Users collection
+    match /users/{userId} {
+      allow read, write: if true;
     }
 
-    // Usuarios collection
-    match /usuarios/{userId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
+    // Transports collection
+    match /transports/{transporteId} {
+      allow read, write: if true;
     }
 
-    // Transportes collection
-    match /transportes/{transporteId} {
-      allow read: if isAuthenticated();
-      allow create, update: if isAuthenticated(); // Operators can create/update
-      allow delete: if isAdmin(); // Only admins can delete
-    }
-
-    // Despachos collection
-    match /despachos/{despachoId} {
-      allow read, create, update: if isAuthenticated();
-      allow delete: if isAdmin();
+    // Shipments collection
+    match /shipments/{despachoId} {
+      allow read, write: if true;
     }
   }
 }

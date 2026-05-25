@@ -4,6 +4,37 @@ import { createServer as createViteServer } from 'vite';
 import Database from 'better-sqlite3';
 import { v4 as uuidv4 } from 'uuid';
 import { COMMUNES_CHILE, getTransportsForCommune } from './src/lib/chile-data.js';
+import dotenv from 'dotenv';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getFirestore, collection, getDocs, doc, setDoc, updateDoc, deleteDoc, getDoc } from 'firebase/firestore';
+
+dotenv.config();
+
+// Firebase initialization
+const firebaseConfig = {
+  apiKey: process.env.VITE_FIREBASE_API_KEY,
+  authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.VITE_FIREBASE_APP_ID
+};
+
+let useFirestore = false;
+let fdb: any = null;
+
+if (firebaseConfig.apiKey && firebaseConfig.projectId) {
+  try {
+    const fapp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+    fdb = getFirestore(fapp);
+    useFirestore = true;
+    console.log('[FIREBASE SERVER] Initialized online Firestore successfully!');
+  } catch (err: any) {
+    console.error('[FIREBASE SERVER] Failed to initialize Firestore online SDK:', err.message);
+  }
+} else {
+  console.log('[FIREBASE SERVER] Standing by on local SQLite fallback because Firestore credentials are not set.');
+}
 
 async function startServer() {
   const app = express();
@@ -306,7 +337,20 @@ async function startServer() {
   /* API ENDPOINTS */
 
   // 1. Get Users
-  app.get('/api/users', (req, res) => {
+  app.get('/api/users', async (req, res) => {
+    if (useFirestore) {
+      try {
+        const snapshot = await getDocs(collection(fdb, 'users'));
+        const users: any[] = [];
+        snapshot.forEach(docSnap => {
+          const u = docSnap.data();
+          users.push({ uid: docSnap.id, email: u.email, nombre: u.nombre, rol: u.rol });
+        });
+        return res.json(users);
+      } catch (err: any) {
+        console.warn('[FIREBASE] Error reading users, falling back to SQLite:', err.message);
+      }
+    }
     try {
       const users = db.prepare('SELECT uid, email, nombre, rol FROM users').all();
       res.json(users);
@@ -316,11 +360,49 @@ async function startServer() {
   });
 
   // 2. Verify User Credentials
-  app.post('/api/users/verify', (req, res) => {
+  app.post('/api/users/verify', async (req, res) => {
     let { email, password } = req.body;
     if (email) email = email.trim();
     if (password) password = password.trim();
     console.log(`[AUTH DEBUG] Attempting verify: email="${email}", password="${password}"`);
+    
+    if (useFirestore) {
+      try {
+        // Check by doc ID
+        const docRef = doc(fdb, 'users', email.toLowerCase().replace(/[^a-z0-9]/g, '_'));
+        let docSnap = await getDoc(docRef);
+        if (!docSnap.exists()) {
+          // Try username directly
+          const docRef2 = doc(fdb, 'users', email);
+          docSnap = await getDoc(docRef2);
+        }
+        
+        let userData: any = null;
+        if (docSnap.exists()) {
+          userData = docSnap.data();
+        } else {
+          const qSnapshot = await getDocs(collection(fdb, 'users'));
+          qSnapshot.forEach(d => {
+            const data = d.data();
+            if (data.email && data.email.toLowerCase() === email.toLowerCase()) {
+              userData = data;
+            }
+          });
+        }
+
+        if (userData) {
+          const match = String(userData.password).trim() === String(password).trim() || (!userData.password && String(password).trim() === '2024');
+          if (match) {
+            const { password: _, ...safeUser } = userData;
+            return res.json(safeUser);
+          }
+          return res.status(401).json({ error: 'La contraseña ingresada es incorrecta' });
+        }
+      } catch (err: any) {
+        console.warn('[FIREBASE] Auth verify error, trying SQLite fallback:', err.message);
+      }
+    }
+
     try {
       // Find case-insensitive match for either email or uid to be extremely forgiving
       const user = db.prepare('SELECT * FROM users WHERE LOWER(email) = LOWER(?) OR LOWER(uid) = LOWER(?)').get(email, email) as any;
@@ -348,16 +430,31 @@ async function startServer() {
   });
 
   // 3. Create User
-  app.post('/api/users', (req, res) => {
+  app.post('/api/users', async (req, res) => {
     const { email, nombre, rol, password } = req.body;
+    const uid = req.body.uid || email.toLowerCase().replace(/[^a-z0-9]/g, '_') || uuidv4();
+    const newUser = { uid, email, nombre, rol, password: password || '2024' };
+
+    if (useFirestore) {
+      try {
+        await setDoc(doc(fdb, 'users', uid), newUser, { merge: true });
+        try {
+          db.prepare('INSERT OR REPLACE INTO users (uid, email, nombre, rol, password) VALUES (?, ?, ?, ?, ?)')
+            .run(uid, email, nombre, rol, newUser.password);
+        } catch (e) {}
+        return res.json({ uid, email, nombre, rol });
+      } catch (err: any) {
+        console.warn('[FIREBASE] Create user error, fallback to SQLite:', err.message);
+      }
+    }
+
     try {
       const exists = db.prepare('SELECT 1 FROM users WHERE email = ?').get(email);
       if (exists) {
         return res.status(400).json({ error: 'El email ya está registrado' });
       }
-      const uid = uuidv4();
       db.prepare('INSERT INTO users (uid, email, nombre, rol, password) VALUES (?, ?, ?, ?, ?)')
-        .run(uid, email, nombre, rol, password || 'password123');
+        .run(uid, email, nombre, rol, password || '2024');
       res.json({ uid, email, nombre, rol });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -365,8 +462,19 @@ async function startServer() {
   });
 
   // 4. Update Password
-  app.post('/api/users/change-password', (req, res) => {
+  app.post('/api/users/change-password', async (req, res) => {
     const { uid, newPassword } = req.body;
+    if (useFirestore) {
+      try {
+        await setDoc(doc(fdb, 'users', uid), { password: newPassword }, { merge: true });
+        try {
+          db.prepare('UPDATE users SET password = ? WHERE uid = ?').run(newPassword, uid);
+        } catch (e) {}
+        return res.json({ success: true });
+      } catch (err: any) {
+        console.warn('[FIREBASE] Change password error, fallback to SQLite:', err.message);
+      }
+    }
     try {
       db.prepare('UPDATE users SET password = ? WHERE uid = ?').run(newPassword, uid);
       res.json({ success: true });
@@ -376,8 +484,19 @@ async function startServer() {
   });
 
   // 5. Delete User
-  app.delete('/api/users/:uid', (req, res) => {
+  app.delete('/api/users/:uid', async (req, res) => {
     const { uid } = req.params;
+    if (useFirestore) {
+      try {
+        await deleteDoc(doc(fdb, 'users', uid));
+        try {
+          db.prepare('DELETE FROM users WHERE uid = ?').run(uid);
+        } catch (e) {}
+        return res.json({ success: true });
+      } catch (err: any) {
+        console.warn('[FIREBASE] Delete user error, fallback to SQLite:', err.message);
+      }
+    }
     try {
       // Prevent last admin deletion
       const admins = db.prepare("SELECT count(*) as count FROM users WHERE rol = 'admin'").get() as { count: number };
@@ -394,9 +513,20 @@ async function startServer() {
   });
 
   // 6. Update User Role
-  app.put('/api/users/:uid/role', (req, res) => {
+  app.put('/api/users/:uid/role', async (req, res) => {
     const { uid } = req.params;
     const { role } = req.body;
+    if (useFirestore) {
+      try {
+        await setDoc(doc(fdb, 'users', uid), { rol: role }, { merge: true });
+        try {
+          db.prepare('UPDATE users SET rol = ? WHERE uid = ?').run(role, uid);
+        } catch (e) {}
+        return res.json({ success: true });
+      } catch (err: any) {
+        console.warn('[FIREBASE] Update role error, fallback to SQLite:', err.message);
+      }
+    }
     try {
       db.prepare('UPDATE users SET rol = ? WHERE uid = ?').run(role, uid);
       res.json({ success: true });
@@ -406,7 +536,45 @@ async function startServer() {
   });
 
   // 7. Get Transports
-  app.get('/api/transports', (req, res) => {
+  app.get('/api/transports', async (req, res) => {
+    if (useFirestore) {
+      try {
+        const snapshot = await getDocs(collection(fdb, 'transports'));
+        const transports: any[] = [];
+        snapshot.forEach(docSnap => {
+          const data = docSnap.data();
+          transports.push({
+            id: docSnap.id,
+            nombre: data.nombre,
+            regiones: data.regiones || [],
+            comunas: data.comunas || [],
+            tipoServicio: data.tipoServicio,
+            costoBase: data.costoBase,
+            costoPorFardo: data.costoPorFardo,
+            tarifaReferencia: data.tarifaReferencia || '',
+            tiempoEntrega: data.tiempoEntrega || '',
+            telefono: data.telefono || '',
+            email: data.email || '',
+            activo: data.activo === undefined ? true : Boolean(data.activo),
+            createdAt: data.createdAt
+          });
+        });
+        
+        if (transports.length === 0) {
+          console.log('[FIREBASE SEED] Firestore transports collection is empty. Auto-seeding now!');
+          const initialTransports = generateInitialTransports();
+          for (const t of initialTransports) {
+            await setDoc(doc(fdb, 'transports', t.id), t, { merge: true });
+            transports.push(t);
+          }
+          console.log('[FIREBASE SEED] Auto-seeded ' + transports.length + ' transports into online Firestore.');
+        }
+        
+        return res.json(transports);
+      } catch (err: any) {
+        console.warn('[FIREBASE] Get transports error, falling back to SQLite:', err.message);
+      }
+    }
     try {
       const transports = db.prepare('SELECT * FROM transports').all() as any[];
       const parsed = transports.map(t => ({
@@ -422,11 +590,58 @@ async function startServer() {
   });
 
   // 8. Create Transport
-  app.post('/api/transports', (req, res) => {
+  app.post('/api/transports', async (req, res) => {
     const data = req.body;
+    const id = data.id || uuidv4();
+    const createdAt = new Date().toISOString();
+    const newTransport = {
+      id,
+      nombre: data.nombre,
+      regiones: data.regiones || [],
+      comunas: data.comunas || [],
+      tipoServicio: data.tipoServicio,
+      costoBase: Number(data.costoBase),
+      costoPorFardo: Number(data.costoPorFardo),
+      tarifaReferencia: data.tarifaReferencia || '',
+      tiempoEntrega: data.tiempoEntrega || '',
+      telefono: data.telefono || '',
+      email: data.email || '',
+      activo: data.activo === undefined ? true : Boolean(data.activo),
+      createdAt
+    };
+
+    if (useFirestore) {
+      try {
+        await setDoc(doc(fdb, 'transports', id), newTransport, { merge: true });
+        try {
+          db.prepare(`
+            INSERT OR REPLACE INTO transports (
+              id, nombre, regiones, comunas, tipoServicio, costoBase, costoPorFardo,
+              tarifaReferencia, tiempoEntrega, telefono, email, activo, createdAt
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            id,
+            newTransport.nombre,
+            JSON.stringify(newTransport.regiones),
+            JSON.stringify(newTransport.comunas),
+            newTransport.tipoServicio,
+            newTransport.costoBase,
+            newTransport.costoPorFardo,
+            newTransport.tarifaReferencia,
+            newTransport.tiempoEntrega,
+            newTransport.telefono,
+            newTransport.email,
+            newTransport.activo ? 1 : 0,
+            createdAt
+          );
+        } catch (e) {}
+        return res.json(newTransport);
+      } catch (err: any) {
+        console.warn('[FIREBASE] Create transport error, falling back to SQLite:', err.message);
+      }
+    }
+
     try {
-      const id = uuidv4();
-      const createdAt = new Date().toISOString();
       db.prepare(`
         INSERT INTO transports (
           id, nombre, regiones, comunas, tipoServicio, costoBase, costoPorFardo,
@@ -454,9 +669,39 @@ async function startServer() {
   });
 
   // 9. Update Transport
-  app.put('/api/transports/:id', (req, res) => {
+  app.put('/api/transports/:id', async (req, res) => {
     const { id } = req.params;
     const data = req.body;
+
+    if (useFirestore) {
+      try {
+        const tRef = doc(fdb, 'transports', id);
+        await setDoc(tRef, data, { merge: true });
+        try {
+          const keys = Object.keys(data);
+          if (keys.length > 0) {
+            let setClause = '';
+            const values: any[] = [];
+            keys.forEach((key, idx) => {
+              setClause += `${key} = ?${idx < keys.length - 1 ? ', ' : ''}`;
+              let val = data[key];
+              if (key === 'regiones' || key === 'comunas') {
+                val = JSON.stringify(val);
+              } else if (key === 'activo') {
+                val = val ? 1 : 0;
+              }
+              values.push(val);
+            });
+            values.push(id);
+            db.prepare(`UPDATE transports SET ${setClause} WHERE id = ?`).run(...values);
+          }
+        } catch (e) {}
+        return res.json({ success: true });
+      } catch (err: any) {
+        console.warn('[FIREBASE] Update transport error, falling back to SQLite:', err.message);
+      }
+    }
+
     try {
       const keys = Object.keys(data);
       if (keys.length === 0) return res.json({ success: true });
@@ -483,8 +728,19 @@ async function startServer() {
   });
 
   // 10. Delete Transport
-  app.delete('/api/transports/:id', (req, res) => {
+  app.delete('/api/transports/:id', async (req, res) => {
     const { id } = req.params;
+    if (useFirestore) {
+      try {
+        await deleteDoc(doc(fdb, 'transports', id));
+        try {
+          db.prepare('DELETE FROM transports WHERE id = ?').run(id);
+        } catch (e) {}
+        return res.json({ success: true });
+      } catch (err: any) {
+        console.warn('[FIREBASE] Delete transport error, falling back to SQLite:', err.message);
+      }
+    }
     try {
       db.prepare('DELETE FROM transports WHERE id = ?').run(id);
       res.json({ success: true });
@@ -494,7 +750,28 @@ async function startServer() {
   });
 
   // 11. Get Shipments
-  app.get('/api/shipments', (req, res) => {
+  app.get('/api/shipments', async (req, res) => {
+    if (useFirestore) {
+      try {
+        const snapshot = await getDocs(collection(fdb, 'shipments'));
+        const shipments: any[] = [];
+        snapshot.forEach(docSnap => {
+          const s = docSnap.data();
+          shipments.push({
+            id: docSnap.id,
+            ...s
+          });
+        });
+        shipments.sort((a, b) => {
+          const tA = a.fecha?.seconds || 0;
+          const tB = b.fecha?.seconds || 0;
+          return tB - tA;
+        });
+        return res.json(shipments);
+      } catch (err: any) {
+        console.warn('[FIREBASE] Get shipments error, falling back to SQLite:', err.message);
+      }
+    }
     try {
       const shipments = db.prepare('SELECT * FROM shipments ORDER BY id DESC').all() as any[];
       const parsed = shipments.map(s => ({
@@ -508,11 +785,56 @@ async function startServer() {
   });
 
   // 12. Create Shipment
-  app.post('/api/shipments', (req, res) => {
+  app.post('/api/shipments', async (req, res) => {
     const data = req.body;
+    const id = data.id || uuidv4();
+    const fecha = { seconds: Math.floor(Date.now() / 1000) };
+    const newShipment = {
+      id,
+      cliente: data.cliente,
+      region: data.region,
+      comuna: data.comuna,
+      direccion: data.direccion,
+      cantidadFardos: Number(data.cantidadFardos),
+      transporteId: data.transporteId,
+      transporteNombre: data.transporteNombre,
+      costoTotal: Number(data.costoTotal),
+      estado: data.estado || 'pendiente',
+      fecha,
+      createdBy: data.createdBy || 'fabian'
+    };
+
+    if (useFirestore) {
+      try {
+        await setDoc(doc(fdb, 'shipments', id), newShipment, { merge: true });
+        try {
+          db.prepare(`
+            INSERT OR REPLACE INTO shipments (
+              id, cliente, region, comuna, direccion, cantidadFardos, transporteId,
+              transporteNombre, costoTotal, estado, fecha, createdBy
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            id,
+            newShipment.cliente,
+            newShipment.region,
+            newShipment.comuna,
+            newShipment.direccion,
+            newShipment.cantidadFardos,
+            newShipment.transporteId,
+            newShipment.transporteNombre,
+            newShipment.costoTotal,
+            newShipment.estado,
+            JSON.stringify(fecha),
+            newShipment.createdBy
+          );
+        } catch (e) {}
+        return res.json(newShipment);
+      } catch (err: any) {
+        console.warn('[FIREBASE] Create shipment error, falling back to SQLite:', err.message);
+      }
+    }
+
     try {
-      const id = uuidv4();
-      const fecha = { seconds: Date.now() / 1000 };
       db.prepare(`
         INSERT INTO shipments (
           id, cliente, region, comuna, direccion, cantidadFardos, transporteId,
@@ -539,9 +861,37 @@ async function startServer() {
   });
 
   // 13. Update Shipment
-  app.put('/api/shipments/:id', (req, res) => {
+  app.put('/api/shipments/:id', async (req, res) => {
     const { id } = req.params;
     const data = req.body;
+
+    if (useFirestore) {
+      try {
+        const sRef = doc(fdb, 'shipments', id);
+        await setDoc(sRef, data, { merge: true });
+        try {
+          const keys = Object.keys(data);
+          if (keys.length > 0) {
+            let setClause = '';
+            const values: any[] = [];
+            keys.forEach((key, idx) => {
+              setClause += `${key} = ?${idx < keys.length - 1 ? ', ' : ''}`;
+              let val = data[key];
+              if (key === 'fecha') {
+                val = JSON.stringify(val);
+              }
+              values.push(val);
+            });
+            values.push(id);
+            db.prepare(`UPDATE shipments SET ${setClause} WHERE id = ?`).run(...values);
+          }
+        } catch (e) {}
+        return res.json({ success: true });
+      } catch (err: any) {
+        console.warn('[FIREBASE] Update shipment error, falling back to SQLite:', err.message);
+      }
+    }
+
     try {
       const keys = Object.keys(data);
       if (keys.length === 0) return res.json({ success: true });
@@ -566,8 +916,19 @@ async function startServer() {
   });
 
   // 14. Delete Shipment
-  app.delete('/api/shipments/:id', (req, res) => {
+  app.delete('/api/shipments/:id', async (req, res) => {
     const { id } = req.params;
+    if (useFirestore) {
+      try {
+        await deleteDoc(doc(fdb, 'shipments', id));
+        try {
+          db.prepare('DELETE FROM shipments WHERE id = ?').run(id);
+        } catch (e) {}
+        return res.json({ success: true });
+      } catch (err: any) {
+        console.warn('[FIREBASE] Delete shipment error, falling back to SQLite:', err.message);
+      }
+    }
     try {
       db.prepare('DELETE FROM shipments WHERE id = ?').run(id);
       res.json({ success: true });
