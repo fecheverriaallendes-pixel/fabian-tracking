@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import Database from 'better-sqlite3';
 import { v4 as uuidv4 } from 'uuid';
@@ -23,6 +24,14 @@ const firebaseConfig = {
 let useFirestore = false;
 let fdb: any = null;
 
+// Helper to make Firestore queries fast-failing, preventing server-side hangs
+function withTimeout<T>(promise: Promise<T>, timeoutMs = 1500): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Firestore query timeout')), timeoutMs))
+  ]);
+}
+
 if (firebaseConfig.apiKey && firebaseConfig.projectId) {
   try {
     const fapp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
@@ -41,6 +50,22 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json());
+
+  // Global diagnostics file logging tool to inspect browser-thrown API issues
+  app.use((req, res, next) => {
+    const originalSend = res.send;
+    res.send = function (body) {
+      if (res.statusCode >= 400 || req.path.startsWith('/api/')) {
+        try {
+          const sample = (typeof body === 'string' && body.length > 0) ? body.substring(0, 150) : '';
+          const logLine = `[${new Date().toISOString()}] ${req.method} ${req.path} - Status ${res.statusCode} - Sample: ${sample}\n`;
+          fs.appendFileSync('server-errors.txt', logLine);
+        } catch (e) {}
+      }
+      return originalSend.apply(this, arguments as any);
+    };
+    next();
+  });
 
   // Verify online Firestore database accessibility. If it's slower than 1.5s or blocked, fall back instantly to high-availability SQLite
   if (useFirestore && fdb) {
@@ -85,6 +110,7 @@ async function startServer() {
       telefono TEXT,
       email TEXT,
       activo INTEGER,
+      observaciones TEXT,
       createdAt TEXT
     );
 
@@ -123,44 +149,41 @@ async function startServer() {
     }
   }
 
-  // Seeding & Enforcing Clean Username-based Users
-  // Wipe all old records to guarantee clean migration as requested
   try {
-    db.exec('DELETE FROM users;');
-    console.log('[AUTH DB] Cleaned existing users table for flexible login migration.');
+    db.exec('ALTER TABLE transports ADD COLUMN observaciones TEXT;');
+    console.log('[SCHEMA MIGRATION] "observaciones" column added successfully to "transports" table.');
   } catch (err: any) {
-    console.error('Failed to clear users table:', err.message);
-  }
-
-  const INITIAL_USERS = [
-    { uid: 'fabian', email: 'f.echeverria.allendes@gmail.com', nombre: 'Fabián Maestro', rol: 'admin', password: '2024' },
-    { uid: 'admin', email: 'admin@logitrack.com', nombre: 'Administrador', rol: 'admin', password: '2024' },
-    { uid: 'operador', email: 'operador@logitrack.com', nombre: 'Operador User', rol: 'operador', password: '2024' },
-    { uid: 'master', email: 'master@logitrack.com', nombre: 'Administrador Maestro', rol: 'admin', password: '2024' },
-  ];
-
-  const insertUser = db.prepare('INSERT INTO users (uid, email, nombre, rol, password) VALUES (?, ?, ?, ?, ?)');
-
-  const transInsert = db.transaction((users) => {
-    for (const u of users) {
-      insertUser.run(u.uid, u.email, u.nombre, u.rol, u.password);
-      console.log(`[AUTH DB] Seeded flexible account: username="${u.uid}" email="${u.email}" (Password: "${u.password}")`);
+    if (!err.message.includes('duplicate column name') && !err.message.includes('already exists')) {
+      console.warn('[SCHEMA MIGRATION] Note on "transports.observaciones" column check:', err.message);
     }
-  });
-  
-  transInsert(INITIAL_USERS);
-  console.log('Seeded and synchronized flexible default users successfully.');
-
-  // Seeding Initial Transports and Enforcing Complete Commune Coverage
-  try {
-    db.exec('DELETE FROM transports;');
-    console.log('[SEED] Cleaned transports table to enforce complete coverage migration.');
-  } catch (err: any) {
-    console.error('Failed to clear transports:', err.message);
   }
 
-  console.log('Seeding initial transports with complete coverage...');
-  
+  // Seeding & Enforcing Clean Username-based Users
+  const userCountRes = db.prepare('SELECT count(*) as count FROM users').get() as { count: number };
+  if (userCountRes.count === 0) {
+    console.log('[AUTH DB] No users found. Seeding default flexible accounts...');
+    const INITIAL_USERS = [
+      { uid: 'fabian', email: 'f.echeverria.allendes@gmail.com', nombre: 'Fabián Maestro', rol: 'admin', password: '2024' },
+      { uid: 'admin', email: 'admin@logitrack.com', nombre: 'Administrador', rol: 'admin', password: '2024' },
+      { uid: 'operador', email: 'operador@logitrack.com', nombre: 'Operador User', rol: 'operador', password: '2024' },
+      { uid: 'master', email: 'master@logitrack.com', nombre: 'Administrador Maestro', rol: 'admin', password: '2024' },
+    ];
+
+    const insertUser = db.prepare('INSERT INTO users (uid, email, nombre, rol, password) VALUES (?, ?, ?, ?, ?)');
+
+    const transInsert = db.transaction((users) => {
+      for (const u of users) {
+        insertUser.run(u.uid, u.email, u.nombre, u.rol, u.password);
+        console.log(`[AUTH DB] Seeded flexible account: username="${u.uid}" email="${u.email}" (Password: "${u.password}")`);
+      }
+    });
+    
+    transInsert(INITIAL_USERS);
+    console.log('Seeded and synchronized flexible default users successfully.');
+  } else {
+    console.log('[AUTH DB] Users already exist in SQLite. Skipping seeding to prevent wiping modifications.');
+  }
+
   const generateInitialTransports = () => {
     const transportMap: Record<string, any> = {};
     const baseTransports = [
@@ -252,36 +275,44 @@ async function startServer() {
     return Object.values(transportMap);
   };
 
-  const initialTransports = generateInitialTransports();
-  const insertTransport = db.prepare(`
-    INSERT INTO transports (
-      id, nombre, regiones, comunas, tipoServicio, costoBase, costoPorFardo,
-      tarifaReferencia, tiempoEntrega, telefono, email, activo, createdAt
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
+  // Seeding Initial Transports if Empty
+  const transportCountRes = db.prepare('SELECT count(*) as count FROM transports').get() as { count: number };
+  if (transportCountRes.count === 0) {
+    console.log('[SEED] No transports found in SQLite database. Creating 40+ default carriers...');
+    const initialTransports = generateInitialTransports();
+    const insertTransport = db.prepare(`
+      INSERT INTO transports (
+        id, nombre, regiones, comunas, tipoServicio, costoBase, costoPorFardo,
+        tarifaReferencia, tiempoEntrega, telefono, email, activo, observaciones, createdAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
 
-  const transInsertTransports = db.transaction((transports) => {
-    for (const t of transports) {
-      insertTransport.run(
-        t.id,
-        t.nombre,
-        JSON.stringify(t.regiones),
-        JSON.stringify(t.comunas),
-        t.tipoServicio,
-        t.costoBase,
-        t.costoPorFardo,
-        t.tarifaReferencia,
-        t.tiempoEntrega,
-        t.telefono,
-        t.email,
-        t.activo,
-        t.createdAt
-      );
-    }
-  });
-  
-  transInsertTransports(initialTransports);
-  console.log('Seeded', initialTransports.length, 'transports.');
+    const transInsertTransports = db.transaction((transports) => {
+      for (const t of transports) {
+        insertTransport.run(
+          t.id,
+          t.nombre,
+          JSON.stringify(t.regiones),
+          JSON.stringify(t.comunas),
+          t.tipoServicio,
+          t.costoBase,
+          t.costoPorFardo,
+          t.tarifaReferencia,
+          t.tiempoEntrega,
+          t.telefono,
+          t.email,
+          t.activo,
+          t.observaciones || '',
+          t.createdAt
+        );
+      }
+    });
+    
+    transInsertTransports(initialTransports);
+    console.log('Seeded', initialTransports.length, 'transports.');
+  } else {
+    console.log('[SEED] Transports already exist in SQLite. Skipping seeding.');
+  }
 
   // Seeding Initial Shipments if Empty
   const shipmentCountRes = db.prepare('SELECT count(*) as count FROM shipments').get() as { count: number };
@@ -553,7 +584,7 @@ async function startServer() {
   app.get('/api/transports', async (req, res) => {
     if (useFirestore) {
       try {
-        const snapshot = await getDocs(collection(fdb, 'transports'));
+        const snapshot = await withTimeout(getDocs(collection(fdb, 'transports')), 1500);
         const transports: any[] = [];
         snapshot.forEach(docSnap => {
           const data = docSnap.data();
@@ -570,6 +601,7 @@ async function startServer() {
             telefono: data.telefono || '',
             email: data.email || '',
             activo: data.activo === undefined ? true : Boolean(data.activo),
+            observaciones: data.observaciones || '',
             createdAt: data.createdAt
           });
         });
@@ -621,6 +653,7 @@ async function startServer() {
       telefono: data.telefono || '',
       email: data.email || '',
       activo: data.activo === undefined ? true : Boolean(data.activo),
+      observaciones: data.observaciones || '',
       createdAt
     };
 
@@ -631,8 +664,8 @@ async function startServer() {
           db.prepare(`
             INSERT OR REPLACE INTO transports (
               id, nombre, regiones, comunas, tipoServicio, costoBase, costoPorFardo,
-              tarifaReferencia, tiempoEntrega, telefono, email, activo, createdAt
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              tarifaReferencia, tiempoEntrega, telefono, email, activo, observaciones, createdAt
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).run(
             id,
             newTransport.nombre,
@@ -646,6 +679,7 @@ async function startServer() {
             newTransport.telefono,
             newTransport.email,
             newTransport.activo ? 1 : 0,
+            newTransport.observaciones,
             createdAt
           );
         } catch (e) {}
@@ -659,8 +693,8 @@ async function startServer() {
       db.prepare(`
         INSERT INTO transports (
           id, nombre, regiones, comunas, tipoServicio, costoBase, costoPorFardo,
-          tarifaReferencia, tiempoEntrega, telefono, email, activo, createdAt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          tarifaReferencia, tiempoEntrega, telefono, email, activo, observaciones, createdAt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id,
         data.nombre,
@@ -669,11 +703,12 @@ async function startServer() {
         data.tipoServicio,
         data.costoBase,
         data.costoPorFardo,
-        data.tarifaReferencia,
-        data.tiempoEntrega,
-        data.telefono,
-        data.email,
+        data.tarifaReferencia || '',
+        data.tiempoEntrega || '',
+        data.telefono || '',
+        data.email || '',
         data.activo ? 1 : 0,
+        data.observaciones || '',
         createdAt
       );
       res.json({ id, ...data, createdAt });
@@ -687,12 +722,17 @@ async function startServer() {
     const { id } = req.params;
     const data = req.body;
 
+    const VALID_TRANSPORT_COLUMNS = [
+      'nombre', 'regiones', 'comunas', 'tipoServicio', 'costoBase', 'costoPorFardo',
+      'tarifaReferencia', 'tiempoEntrega', 'telefono', 'email', 'activo', 'observaciones'
+    ];
+
     if (useFirestore) {
       try {
         const tRef = doc(fdb, 'transports', id);
         await setDoc(tRef, data, { merge: true });
         try {
-          const keys = Object.keys(data);
+          const keys = Object.keys(data).filter(key => VALID_TRANSPORT_COLUMNS.includes(key));
           if (keys.length > 0) {
             let setClause = '';
             const values: any[] = [];
@@ -717,7 +757,7 @@ async function startServer() {
     }
 
     try {
-      const keys = Object.keys(data);
+      const keys = Object.keys(data).filter(key => VALID_TRANSPORT_COLUMNS.includes(key));
       if (keys.length === 0) return res.json({ success: true });
 
       let setClause = '';
@@ -767,7 +807,7 @@ async function startServer() {
   app.get('/api/shipments', async (req, res) => {
     if (useFirestore) {
       try {
-        const snapshot = await getDocs(collection(fdb, 'shipments'));
+        const snapshot = await withTimeout(getDocs(collection(fdb, 'shipments')), 1500);
         const shipments: any[] = [];
         snapshot.forEach(docSnap => {
           const s = docSnap.data();
@@ -1003,8 +1043,8 @@ async function startServer() {
         const insertTransport = db.prepare(`
           INSERT INTO transports (
             id, nombre, regiones, comunas, tipoServicio, costoBase, costoPorFardo,
-            tarifaReferencia, tiempoEntrega, telefono, email, activo, createdAt
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            tarifaReferencia, tiempoEntrega, telefono, email, activo, observaciones, createdAt
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         for (const t of data.transports) {
           insertTransport.run(
@@ -1015,11 +1055,12 @@ async function startServer() {
             t.tipoServicio,
             t.costoBase,
             t.costoPorFardo,
-            t.tarifaReferencia,
-            t.tiempoEntrega,
-            t.telefono,
-            t.email,
+            t.tarifaReferencia || '',
+            t.tiempoEntrega || '',
+            t.telefono || '',
+            t.email || '',
             t.activo ? 1 : 0,
+            t.observaciones || '',
             t.createdAt || new Date().toISOString()
           );
         }
