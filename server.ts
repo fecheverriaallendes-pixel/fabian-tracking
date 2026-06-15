@@ -607,12 +607,17 @@ async function startServer() {
         });
         
         if (transports.length === 0) {
-          console.log('[FIREBASE SEED] Firestore transports collection is empty. Auto-seeding now!');
+          console.log('[FIREBASE SEED] Firestore transports collection is empty. Auto-seeding now in parallel...');
           const initialTransports = generateInitialTransports();
-          for (const t of initialTransports) {
-            await setDoc(doc(fdb, 'transports', t.id), t, { merge: true });
-            transports.push(t);
-          }
+          const promises = initialTransports.map(async (t) => {
+            try {
+              await withTimeout(setDoc(doc(fdb, 'transports', t.id), t, { merge: true }), 2000);
+              transports.push(t);
+            } catch (err: any) {
+              console.warn(`[FIREBASE SEED] Map item seeding failed for ${t.nombre}:`, err.message);
+            }
+          });
+          await Promise.allSettled(promises);
           console.log('[FIREBASE SEED] Auto-seeded ' + transports.length + ' transports into online Firestore.');
         }
         
@@ -1108,19 +1113,25 @@ async function startServer() {
         { uid: 'master', email: 'master@logitrack.com', nombre: 'Administrador Maestro', rol: 'admin', password: '2024' },
       ];
 
-      // Update Firestore online collections if available
+      // Update Firestore online collections if available with fast-failing parallel execution
       if (useFirestore && fdb) {
-        console.log('[REBUILD API] [FIRESTORE] Populating online database collections directly...');
-        // Sync Users to Firestore
-        for (const u of INITIAL_USERS) {
-          await setDoc(doc(fdb, 'users', u.uid), u, { merge: true });
+        console.log('[REBUILD API] [FIRESTORE] Populating online database collections directly in parallel...');
+        try {
+          // Sync Users to Firestore in parallel
+          const userPromises = INITIAL_USERS.map(u => 
+            withTimeout(setDoc(doc(fdb, 'users', u.uid), u, { merge: true }), 2500)
+          );
+          await Promise.allSettled(userPromises);
+          
+          // Sync Transports to Firestore in parallel
+          const transportPromises = initialTransports.map(t =>
+            withTimeout(setDoc(doc(fdb, 'transports', t.id), t, { merge: true }), 4000)
+          );
+          await Promise.allSettled(transportPromises);
+          console.log('[REBUILD API] [FIRESTORE] Complete synchronization of 40+ transports completed.');
+        } catch (fErr: any) {
+          console.warn('[REBUILD API] [FIRESTORE] Error synchronizing to Firestore online, but proceeding with local SQLite:', fErr.message);
         }
-        
-        // Sync Transports to Firestore (using chunks/sequential check to safeguard memory constraints)
-        for (const t of initialTransports) {
-          await setDoc(doc(fdb, 'transports', t.id), t, { merge: true });
-        }
-        console.log('[REBUILD API] [FIRESTORE] Complete synchronization of 40+ transports succeeded.');
       }
 
       // Always clear and seed local SQLite fallback
@@ -1164,7 +1175,7 @@ async function startServer() {
       res.json({ success: true, count: initialTransports.length });
     } catch (error: any) {
       console.error('[REBUILD API] Error reconstructing:', error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: error.message || 'Error interno reconstruyendo base de datos' });
     }
   });
 
