@@ -1095,6 +1095,79 @@ async function startServer() {
     }
   });
 
+  // 17. Safe Complete Rebuild/Reseed Database Route (Forces both SQLite and online Firestore synchronization)
+  app.post('/api/rebuild-db', async (req, res) => {
+    try {
+      console.log('[REBUILD API] Initiating absolute database clean wipe and national carriers seeding...');
+      const initialTransports = generateInitialTransports();
+
+      const INITIAL_USERS = [
+        { uid: 'fabian', email: 'f.echeverria.allendes@gmail.com', nombre: 'Fabián Maestro', rol: 'admin', password: '2024' },
+        { uid: 'admin', email: 'admin@logitrack.com', nombre: 'Administrador', rol: 'admin', password: '2024' },
+        { uid: 'operador', email: 'operador@logitrack.com', nombre: 'Operador User', rol: 'operador', password: '2024' },
+        { uid: 'master', email: 'master@logitrack.com', nombre: 'Administrador Maestro', rol: 'admin', password: '2024' },
+      ];
+
+      // Update Firestore online collections if available
+      if (useFirestore && fdb) {
+        console.log('[REBUILD API] [FIRESTORE] Populating online database collections directly...');
+        // Sync Users to Firestore
+        for (const u of INITIAL_USERS) {
+          await setDoc(doc(fdb, 'users', u.uid), u, { merge: true });
+        }
+        
+        // Sync Transports to Firestore (using chunks/sequential check to safeguard memory constraints)
+        for (const t of initialTransports) {
+          await setDoc(doc(fdb, 'transports', t.id), t, { merge: true });
+        }
+        console.log('[REBUILD API] [FIRESTORE] Complete synchronization of 40+ transports succeeded.');
+      }
+
+      // Always clear and seed local SQLite fallback
+      db.transaction(() => {
+        db.prepare('DELETE FROM users').run();
+        db.prepare('DELETE FROM transports').run();
+        db.prepare('DELETE FROM shipments').run();
+
+        const insertUser = db.prepare('INSERT INTO users (uid, email, nombre, rol, password) VALUES (?, ?, ?, ?, ?)');
+        for (const u of INITIAL_USERS) {
+          insertUser.run(u.uid, u.email, u.nombre, u.rol, u.password);
+        }
+
+        const insertTransport = db.prepare(`
+          INSERT INTO transports (
+            id, nombre, regiones, comunas, tipoServicio, costoBase, costoPorFardo,
+            tarifaReferencia, tiempoEntrega, telefono, email, activo, observaciones, createdAt
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        for (const t of initialTransports) {
+          insertTransport.run(
+            t.id,
+            t.nombre,
+            JSON.stringify(t.regiones),
+            JSON.stringify(t.comunas),
+            t.tipoServicio,
+            t.costoBase,
+            t.costoPorFardo,
+            t.tarifaReferencia,
+            t.tiempoEntrega,
+            t.telefono,
+            t.email,
+            t.activo,
+            t.observaciones || '',
+            t.createdAt
+          );
+        }
+      })();
+
+      console.log('[REBUILD API] Database fully built and reseeded successfully!');
+      res.json({ success: true, count: initialTransports.length });
+    } catch (error: any) {
+      console.error('[REBUILD API] Error reconstructing:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
 
   // Handle favicon.ico requests by serving the high-resolution vector logo
   app.get('/favicon.ico', (req, res) => {
@@ -1114,7 +1187,7 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*all', (req, res) => {
+    app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }

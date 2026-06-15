@@ -25,7 +25,25 @@ type ChangePasswordForm = z.infer<typeof changePasswordSchema>;
 export default function Settings() {
   const [activeTab, setActiveTab] = useState<'backups' | 'users'>('backups');
   const [loading, setLoading] = useState(false);
+  const [rebuilding, setRebuilding] = useState(false);
   const { user: currentUser } = useAuth();
+
+  const handleRebuild = async () => {
+    if (!confirm('ADVERTENCIA: ¿Estás seguro de reconstruir la base de datos nacional completa? Se borrarán usuarios, despachos de ejemplo e instalará el listado con más de 40 transportes y 345 comunas de cobertura tanto de tu servidor local como de tu base de datos FirebaseFirestore online asociada. Esta acción no se puede deshacer.')) {
+      return;
+    }
+    setRebuilding(true);
+    try {
+      const result = await dbService.rebuildDatabase();
+      toast.success(`¡Base de datos nacional re-inicializada con éxito! ${result.count} transportistas sembrados.`);
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error.message || 'Error al reconstruir la base de datos nacional');
+    } finally {
+      setRebuilding(false);
+    }
+  };
 
   // User list states
   const [usersList, setUsersList] = useState<User[]>([]);
@@ -239,6 +257,44 @@ export default function Settings() {
                 Seleccionar Archivo de Respaldo
               </button>
             </div>
+          </div>
+
+          {/* Re-seed/Reconstruct National Database Card */}
+          <div className="md:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+            <div className="flex items-center mb-4">
+              <div className="p-2 bg-red-100 rounded-lg text-red-600 mr-3">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Restablecimiento Completo & Cobertura Nacional de Fábrica</h2>
+                <p className="text-sm text-slate-500">
+                  Fuerza la reinstalación y sincronización del listado completo de los 40+ transportistas y sus 345 comunas de cobertura chilena.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-6 font-medium text-xs text-slate-700 leading-relaxed">
+              <p className="font-bold text-red-600 mb-1">💡 ¿Cuándo utilizar esta herramienta?</p>
+              Utiliza esta opción si implementaste la aplicación en un nuevo entorno (con vinculación online a Firebase Firestore) o si notas que no aparecen los 40 transportistas o las 345 comunas por defecto en tus búsquedas. Esto reconstruirá la base de datos local SQLite y sincronizará en masa todos los transportes y zonas a Firebase Firestore si está activo en la nube.
+            </div>
+
+            <button
+              onClick={handleRebuild}
+              disabled={rebuilding}
+              className="w-full flex items-center justify-center px-4 py-3 bg-red-600 font-bold text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-70 text-sm shadow-sm"
+              id="settings-rebuild-db-btn"
+            >
+              {rebuilding ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Sincronizando cobertura nacional (40+ transportistas y 345 comunas)...
+                </>
+              ) : (
+                <>
+                  ⚡ Reconstruir Base de Datos Completa & Sincronizar Cobertura de Fábrica
+                </>
+              )}
+            </button>
           </div>
         </div>
       )}

@@ -117,30 +117,15 @@ export default function Dashboard() {
   const forseDatabaseRestore = async () => {
     try {
       setDebugInfo(prev => prev + '\nEnviando comando de reconstrucción de Base de Datos...\n');
-      const resBackup = await fetch('/api/backup');
-      const dataBackup = await resBackup.json();
+      setDebugInfo(prev => prev + '   Sincronizando 40+ transportistas y las 345 comunas de cobertura...\n');
       
-      // If empty, restore defaults
-      if (!dataBackup.transports || dataBackup.transports.length === 0) {
-        setDebugInfo(prev => prev + '   La Base de Datos del Backend estaba vacía. Insertando semilla nacional completa...\n');
-      }
+      const result = await dbService.rebuildDatabase();
       
-      const restoreRes = await fetch('/api/restore', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          users: dataBackup.users && dataBackup.users.length > 0 ? dataBackup.users : [
-            { uid: 'fabian', email: 'f.echeverria.allendes@gmail.com', nombre: 'Fabián Maestro', rol: 'admin', password: '2024' }
-          ],
-          transports: dataBackup.transports && dataBackup.transports.length > 0 ? dataBackup.transports : [],
-          shipments: dataBackup.shipments || []
-        })
-      });
-      
-      if (restoreRes.ok) {
-        toast.success("¡Base de datos nacional restablecida!");
-        setDebugInfo(prev => prev + '   ¡Base de datos restablecida correctamente en SQLite del servidor!\n');
-        // Reload
+      if (result.success) {
+        toast.success(`¡Base de datos nacional restablecida! (${result.count} transportistas precargados)`);
+        setDebugInfo(prev => prev + `   ¡Base de datos restablecida correctamente en el servidor! ${result.count} flotas sembradas.\n`);
+        
+        // Reload dashboard state
         const transports = await dbService.getTransports();
         setTransportsList(transports);
         const activeTransportsList = transports.filter(t => t.activo);
@@ -148,6 +133,7 @@ export default function Dashboard() {
         activeTransportsList.forEach(t => {
           t.comunas?.forEach(c => communesSet.add(c));
         });
+        
         setStats({
           totalTransports: transports.length,
           activeTransports: activeTransportsList.length,

@@ -254,4 +254,20 @@ export const dbService = {
       throw new Error(error.message || 'Error al importar base de datos');
     }
   },
+
+  rebuildDatabase: async () => {
+    try {
+      const res = await fetch('/api/rebuild-db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'No se pudo reconstruir la base de datos');
+      }
+      return await res.json();
+    } catch (error: any) {
+      throw new Error(error.message || 'Error al reconstruir la base de datos');
+    }
+  }
 };
