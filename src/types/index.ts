@@ -15,6 +15,7 @@ export interface Transport {
   nombre: string;
   regiones: string[];
   comunas: string[];
+  tarifasPorComuna?: Record<string, number>; // Specific tariffs per commune, e.g. { "Paine": 20000, "La Florida": 8000 }
   tipoServicio: 'express' | 'normal' | 'cargo';
   costoBase: number;
   costoPorFardo: number;

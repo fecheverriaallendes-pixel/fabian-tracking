@@ -64,6 +64,7 @@ function generateClientInitialTransports(): Transport[] {
     { name: "Cruz del Sur", type: "normal" as const, cost: 4000, time: "24-48 hrs", tarifaRef: "" },
     { name: "Zona Sur", type: "normal" as const, cost: 4000, time: "24-48 hrs", tarifaRef: "" },
     { name: "Transchiloé", type: "normal" as const, cost: 4000, time: "24-48 hrs", tarifaRef: "" },
+    { name: "Transportes Tamarindo", type: "cargo" as const, cost: 15000, time: "24-48 hrs", tarifaRef: "Tarifas diferenciadas por comuna", tarifasPorComuna: { "Paine": 20000, "La Florida": 8000, "Calera de Tango": 10000 } },
   ];
 
   baseTransports.forEach((t) => {
@@ -73,6 +74,7 @@ function generateClientInitialTransports(): Transport[] {
       nombre: t.name,
       regiones: [] as string[],
       comunas: [] as string[],
+      tarifasPorComuna: (t as any).tarifasPorComuna || {},
       tipoServicio: t.type,
       costoBase: t.cost,
       costoPorFardo: Math.round(t.cost * 0.2),

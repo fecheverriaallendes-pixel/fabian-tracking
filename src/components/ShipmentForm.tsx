@@ -55,17 +55,27 @@ export function ShipmentForm({ initialData, onSubmit, onCancel }: ShipmentFormPr
     fetchTransports();
   }, []);
 
+  // Helper to determine the applicable base cost for a specific commune
+  const getTransportBaseCost = (transport: Transport, comuna?: string) => {
+    if (comuna && transport.tarifasPorComuna && typeof transport.tarifasPorComuna[comuna] === 'number') {
+      return transport.tarifasPorComuna[comuna];
+    }
+    return transport.costoBase;
+  };
+
   // Filter transports when comuna changes
   useEffect(() => {
     if (selectedComuna && transports.length > 0) {
       const filtered = transports.filter(t => t.comunas.includes(selectedComuna));
       setFilteredTransports(filtered);
 
-      // Simple recommendation logic: Cheapest
+      // Recommendation logic: Cheapest total for selected commune
       if (filtered.length > 0) {
         const cheapest = filtered.reduce((prev, curr) => {
-          const prevCost = prev.costoBase + (prev.costoPorFardo * (quantity || 1));
-          const currCost = curr.costoBase + (curr.costoPorFardo * (quantity || 1));
+          const prevBase = getTransportBaseCost(prev, selectedComuna);
+          const currBase = getTransportBaseCost(curr, selectedComuna);
+          const prevCost = prevBase + (prev.costoPorFardo * (quantity || 1));
+          const currCost = currBase + (curr.costoPorFardo * (quantity || 1));
           return prevCost < currCost ? prev : curr;
         });
         setRecommendedTransportId(cheapest.id!);
@@ -83,11 +93,12 @@ export function ShipmentForm({ initialData, onSubmit, onCancel }: ShipmentFormPr
     if (selectedTransportId && quantity) {
       const transport = transports.find(t => t.id === selectedTransportId);
       if (transport) {
-        const total = transport.costoBase + (transport.costoPorFardo * quantity);
+        const baseCost = getTransportBaseCost(transport, selectedComuna);
+        const total = baseCost + (transport.costoPorFardo * quantity);
         setValue('costoTotal', total);
       }
     }
-  }, [selectedTransportId, quantity, transports, setValue]);
+  }, [selectedTransportId, quantity, selectedComuna, transports, setValue]);
 
   const handleFormSubmit = async (data: ShipmentFormData) => {
     setLoading(true);
@@ -181,7 +192,9 @@ export function ShipmentForm({ initialData, onSubmit, onCancel }: ShipmentFormPr
           ) : (
             <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
               {filteredTransports.map(transport => {
-                const cost = transport.costoBase + (transport.costoPorFardo * (quantity || 1));
+                const baseCost = getTransportBaseCost(transport, selectedComuna);
+                const cost = baseCost + (transport.costoPorFardo * (quantity || 1));
+                const isCustomTariff = Boolean(selectedComuna && transport.tarifasPorComuna && typeof transport.tarifasPorComuna[selectedComuna] === 'number');
                 const isRecommended = transport.id === recommendedTransportId;
                 const isSelected = selectedTransportId === transport.id;
 
@@ -205,7 +218,14 @@ export function ShipmentForm({ initialData, onSubmit, onCancel }: ShipmentFormPr
                     
                     <div className="flex justify-between items-start">
                       <div>
-                        <h4 className="font-bold text-slate-900">{transport.nombre}</h4>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-slate-900">{transport.nombre}</h4>
+                          {isCustomTariff && (
+                            <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-1.5 py-0.5 rounded border border-emerald-200">
+                              Tarifa {selectedComuna}: {formatCurrency(baseCost)}
+                            </span>
+                          )}
+                        </div>
                         <div className="flex items-center text-xs text-slate-500 mt-1 space-x-3">
                           <span className="flex items-center"><Clock className="w-3 h-3 mr-1" /> {transport.tiempoEntrega}</span>
                           <span className="capitalize bg-slate-200 px-1.5 py-0.5 rounded text-slate-700">{transport.tipoServicio}</span>

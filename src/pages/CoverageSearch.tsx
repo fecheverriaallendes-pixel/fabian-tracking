@@ -208,10 +208,19 @@ export default function CoverageSearch() {
                     <div className="flex items-center justify-between text-slate-600">
                       <div className="flex items-center">
                         <DollarSign className="w-4 h-4 mr-2 text-slate-400" />
-                        <span>Costo Base</span>
+                        <span>Costo Base ({selectedComuna.c})</span>
                       </div>
-                      <span className="font-extrabold text-slate-900 text-base font-mono">
-                        {transport.tarifaReferencia || formatCurrency(transport.costoBase)}
+                      <span className="font-extrabold text-slate-900 text-base font-mono flex items-center gap-1.5">
+                        {selectedComuna && transport.tarifasPorComuna && typeof transport.tarifasPorComuna[selectedComuna.c] === 'number' ? (
+                          <>
+                            <span className="text-emerald-700 font-black">{formatCurrency(transport.tarifasPorComuna[selectedComuna.c])}</span>
+                            <span className="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-1.5 py-0.2 rounded border border-emerald-200">
+                              Tarifado
+                            </span>
+                          </>
+                        ) : (
+                          transport.tarifaReferencia || formatCurrency(transport.costoBase)
+                        )}
                       </span>
                     </div>
                   </div>
@@ -219,7 +228,10 @@ export default function CoverageSearch() {
                   <div className="pt-2 border-t border-slate-100">
                     <button 
                       onClick={() => {
-                        const costo = transport.tarifaReferencia || formatCurrency(transport.costoBase);
+                        const hasCustom = selectedComuna && transport.tarifasPorComuna && typeof transport.tarifasPorComuna[selectedComuna.c] === 'number';
+                        const costo = hasCustom 
+                          ? `${formatCurrency(transport.tarifasPorComuna![selectedComuna.c])} (Tarifa diferenciada)`
+                          : (transport.tarifaReferencia || formatCurrency(transport.costoBase));
                         const text = `✅ *${transport.nombre}* llega a *${selectedComuna.c}*\n⏱ Tiempo: ${transport.tiempoEntrega}\n💰 Costo ref: ${costo}`;
                         navigator.clipboard.writeText(text);
                         toast.success(`Datos de ${transport.nombre} copiados al portapapeles`);

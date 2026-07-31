@@ -163,6 +163,15 @@ async function startServer() {
     }
   }
 
+  try {
+    db.exec('ALTER TABLE transports ADD COLUMN tarifasPorComuna TEXT;');
+    console.log('[SCHEMA MIGRATION] "tarifasPorComuna" column added successfully to "transports" table.');
+  } catch (err: any) {
+    if (!err.message.includes('duplicate column name') && !err.message.includes('already exists')) {
+      console.warn('[SCHEMA MIGRATION] Note on "transports.tarifasPorComuna" column check:', err.message);
+    }
+  }
+
   // Seeding & Enforcing Clean Username-based Users
   const userCountRes = db.prepare('SELECT count(*) as count FROM users').get() as { count: number };
   if (userCountRes.count === 0) {
@@ -232,6 +241,7 @@ async function startServer() {
       { name: "Cruz del Sur", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
       { name: "Zona Sur", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
       { name: "Transchiloé", type: "normal", cost: 4000, time: "24-48 hrs", tarifaRef: "" },
+      { name: "Transportes Tamarindo", type: "cargo", cost: 15000, time: "24-48 hrs", tarifaRef: "Tarifas diferenciadas por comuna", tarifasPorComuna: { "Paine": 20000, "La Florida": 8000, "Calera de Tango": 10000 } },
     ];
 
     baseTransports.forEach(t => {
@@ -240,6 +250,7 @@ async function startServer() {
         nombre: t.name,
         regiones: [] as string[],
         comunas: [] as string[],
+        tarifasPorComuna: t.tarifasPorComuna || {},
         tipoServicio: t.type,
         costoBase: t.cost,
         costoPorFardo: Math.round(t.cost * 0.2),
@@ -287,9 +298,9 @@ async function startServer() {
     const initialTransports = generateInitialTransports();
     const insertTransport = db.prepare(`
       INSERT INTO transports (
-        id, nombre, regiones, comunas, tipoServicio, costoBase, costoPorFardo,
+        id, nombre, regiones, comunas, tarifasPorComuna, tipoServicio, costoBase, costoPorFardo,
         tarifaReferencia, tiempoEntrega, telefono, email, activo, observaciones, createdAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const transInsertTransports = db.transaction((transports) => {
@@ -299,6 +310,7 @@ async function startServer() {
           t.nombre,
           JSON.stringify(t.regiones),
           JSON.stringify(t.comunas),
+          JSON.stringify(t.tarifasPorComuna || {}),
           t.tipoServicio,
           t.costoBase,
           t.costoPorFardo,
@@ -598,6 +610,7 @@ async function startServer() {
             nombre: data.nombre,
             regiones: data.regiones || [],
             comunas: data.comunas || [],
+            tarifasPorComuna: data.tarifasPorComuna || {},
             tipoServicio: data.tipoServicio,
             costoBase: data.costoBase,
             costoPorFardo: data.costoPorFardo,
@@ -637,6 +650,7 @@ async function startServer() {
         ...t,
         regiones: JSON.parse(t.regiones || '[]'),
         comunas: JSON.parse(t.comunas || '[]'),
+        tarifasPorComuna: JSON.parse(t.tarifasPorComuna || '{}'),
         activo: Boolean(t.activo),
       }));
       res.json(parsed);
@@ -655,6 +669,7 @@ async function startServer() {
       nombre: data.nombre,
       regiones: data.regiones || [],
       comunas: data.comunas || [],
+      tarifasPorComuna: data.tarifasPorComuna || {},
       tipoServicio: data.tipoServicio,
       costoBase: Number(data.costoBase),
       costoPorFardo: Number(data.costoPorFardo),
@@ -673,14 +688,15 @@ async function startServer() {
         try {
           db.prepare(`
             INSERT OR REPLACE INTO transports (
-              id, nombre, regiones, comunas, tipoServicio, costoBase, costoPorFardo,
+              id, nombre, regiones, comunas, tarifasPorComuna, tipoServicio, costoBase, costoPorFardo,
               tarifaReferencia, tiempoEntrega, telefono, email, activo, observaciones, createdAt
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).run(
             id,
             newTransport.nombre,
             JSON.stringify(newTransport.regiones),
             JSON.stringify(newTransport.comunas),
+            JSON.stringify(newTransport.tarifasPorComuna),
             newTransport.tipoServicio,
             newTransport.costoBase,
             newTransport.costoPorFardo,
@@ -702,14 +718,15 @@ async function startServer() {
     try {
       db.prepare(`
         INSERT INTO transports (
-          id, nombre, regiones, comunas, tipoServicio, costoBase, costoPorFardo,
+          id, nombre, regiones, comunas, tarifasPorComuna, tipoServicio, costoBase, costoPorFardo,
           tarifaReferencia, tiempoEntrega, telefono, email, activo, observaciones, createdAt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id,
         data.nombre,
         JSON.stringify(data.regiones || []),
         JSON.stringify(data.comunas || []),
+        JSON.stringify(data.tarifasPorComuna || {}),
         data.tipoServicio,
         data.costoBase,
         data.costoPorFardo,
@@ -733,7 +750,7 @@ async function startServer() {
     const data = req.body;
 
     const VALID_TRANSPORT_COLUMNS = [
-      'nombre', 'regiones', 'comunas', 'tipoServicio', 'costoBase', 'costoPorFardo',
+      'nombre', 'regiones', 'comunas', 'tarifasPorComuna', 'tipoServicio', 'costoBase', 'costoPorFardo',
       'tarifaReferencia', 'tiempoEntrega', 'telefono', 'email', 'activo', 'observaciones'
     ];
 
@@ -749,7 +766,7 @@ async function startServer() {
             keys.forEach((key, idx) => {
               setClause += `${key} = ?${idx < keys.length - 1 ? ', ' : ''}`;
               let val = data[key];
-              if (key === 'regiones' || key === 'comunas') {
+              if (key === 'regiones' || key === 'comunas' || key === 'tarifasPorComuna') {
                 val = JSON.stringify(val);
               } else if (key === 'activo') {
                 val = val ? 1 : 0;
@@ -775,7 +792,7 @@ async function startServer() {
       keys.forEach((key, idx) => {
         setClause += `${key} = ?${idx < keys.length - 1 ? ', ' : ''}`;
         let val = data[key];
-        if (key === 'regiones' || key === 'comunas') {
+        if (key === 'regiones' || key === 'comunas' || key === 'tarifasPorComuna') {
           val = JSON.stringify(val);
         } else if (key === 'activo') {
           val = val ? 1 : 0;
