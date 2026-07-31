@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Search, MapPin, Truck, Clock, DollarSign, X, Check, Copy } from 'lucide-react';
+import { Search, MapPin, Truck, Clock, DollarSign, X, Check, Copy, Tag } from 'lucide-react';
 import { COMMUNES_CHILE } from '../lib/chile-data';
 import { dbService } from '../services/db';
 import { Transport } from '../types';
@@ -36,7 +36,12 @@ export default function CoverageSearch() {
   // Update available transports when a commune is selected
   useEffect(() => {
     if (selectedComuna && transports.length > 0) {
-      const filtered = transports.filter(t => t.comunas.includes(selectedComuna.c) && t.activo);
+      const filtered = transports.filter(t => 
+        t.activo && (
+          t.comunas.includes(selectedComuna.c) || 
+          (t.tarifasPorComuna && selectedComuna.c in t.tarifasPorComuna)
+        )
+      );
       setAvailableTransports(filtered);
     } else {
       setAvailableTransports([]);
@@ -197,6 +202,22 @@ export default function CoverageSearch() {
                     </div>
                   </div>
 
+                  {/* Special Tariff Alert Banner if applicable */}
+                  {selectedComuna && transport.tarifasPorComuna && typeof transport.tarifasPorComuna[selectedComuna.c] === 'number' && (
+                    <div className="bg-emerald-50 border border-emerald-200/90 rounded-2xl p-3 flex items-center justify-between text-emerald-950 shadow-2xs">
+                      <div className="flex items-center gap-2">
+                        <Tag className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <div>
+                          <p className="text-xs font-black text-emerald-900">Tarifa Especial {selectedComuna.c}</p>
+                          <p className="text-[10px] font-semibold text-emerald-700">Precio configurado por comuna</p>
+                        </div>
+                      </div>
+                      <span className="text-sm font-black font-mono text-emerald-800 bg-white px-2.5 py-1 rounded-xl border border-emerald-200 shadow-2xs">
+                        {formatCurrency(transport.tarifasPorComuna[selectedComuna.c])}
+                      </span>
+                    </div>
+                  )}
+
                   <div className="space-y-2.5 text-sm bg-slate-50/70 rounded-2xl p-4 border border-slate-100 font-medium">
                     <div className="flex items-center justify-between text-slate-600">
                       <div className="flex items-center">
@@ -208,14 +229,14 @@ export default function CoverageSearch() {
                     <div className="flex items-center justify-between text-slate-600">
                       <div className="flex items-center">
                         <DollarSign className="w-4 h-4 mr-2 text-slate-400" />
-                        <span>Costo Base ({selectedComuna.c})</span>
+                        <span>{selectedComuna && transport.tarifasPorComuna && typeof transport.tarifasPorComuna[selectedComuna.c] === 'number' ? `Tarifa ${selectedComuna.c}` : 'Costo Base General'}</span>
                       </div>
                       <span className="font-extrabold text-slate-900 text-base font-mono flex items-center gap-1.5">
                         {selectedComuna && transport.tarifasPorComuna && typeof transport.tarifasPorComuna[selectedComuna.c] === 'number' ? (
                           <>
-                            <span className="text-emerald-700 font-black">{formatCurrency(transport.tarifasPorComuna[selectedComuna.c])}</span>
+                            <span className="text-emerald-700 font-black text-lg">{formatCurrency(transport.tarifasPorComuna[selectedComuna.c])}</span>
                             <span className="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-1.5 py-0.2 rounded border border-emerald-200">
-                              Tarifado
+                              Especial
                             </span>
                           </>
                         ) : (

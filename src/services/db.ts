@@ -148,6 +148,22 @@ function initializeFallbackDB(): void {
     setStorage('ft_shipments', defaultShipments);
     localStorage.setItem('ft_fallback_seeded', 'true');
     console.log('[LOCAL STORAGE DB] Seeding high-availability browser database successfully.');
+  } else {
+    // If already seeded, ensure Transportes Tamarindo is present with custom rates
+    const existingTransports = getStorage<Transport[]>('ft_transports', []);
+    if (!existingTransports.some(t => t.nombre === 'Transportes Tamarindo')) {
+      const tamarindo = generateClientInitialTransports().find(t => t.nombre === 'Transportes Tamarindo');
+      if (tamarindo) {
+        existingTransports.push(tamarindo);
+        setStorage('ft_transports', existingTransports);
+      }
+    } else {
+      const idx = existingTransports.findIndex(t => t.nombre === 'Transportes Tamarindo');
+      if (idx !== -1 && (!existingTransports[idx].tarifasPorComuna || Object.keys(existingTransports[idx].tarifasPorComuna || {}).length === 0)) {
+        existingTransports[idx].tarifasPorComuna = { "Paine": 20000, "La Florida": 8000, "Calera de Tango": 10000 };
+        setStorage('ft_transports', existingTransports);
+      }
+    }
   }
 }
 

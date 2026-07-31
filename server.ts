@@ -172,6 +172,43 @@ async function startServer() {
     }
   }
 
+  // Ensure Transportes Tamarindo is present and seeded with commune rates
+  const checkTamarindo = db.prepare('SELECT id FROM transports WHERE nombre = ?').get('Transportes Tamarindo');
+  if (!checkTamarindo) {
+    console.log('[SEED] Inserting default Transportes Tamarindo...');
+    const allRegions = Array.from(new Set(COMMUNES_CHILE.map(c => c.r)));
+    const allCommunes = COMMUNES_CHILE.map(c => c.c);
+    
+    db.prepare(`
+      INSERT INTO transports (
+        id, nombre, regiones, comunas, tarifasPorComuna, tipoServicio, costoBase, costoPorFardo,
+        tarifaReferencia, tiempoEntrega, telefono, email, activo, observaciones, createdAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      'carrier-transportes-tamarindo',
+      'Transportes Tamarindo',
+      JSON.stringify(allRegions),
+      JSON.stringify(allCommunes),
+      JSON.stringify({ "Paine": 20000, "La Florida": 8000, "Calera de Tango": 10000 }),
+      'cargo',
+      15000,
+      3000,
+      'Tarifas diferenciadas por comuna',
+      '24-48 hrs',
+      '+56900000000',
+      'contacto@transportestamarindo.cl',
+      1,
+      'Transporte con tarifas diferenciadas por comuna',
+      new Date().toISOString()
+    );
+  } else {
+    db.prepare(`
+      UPDATE transports 
+      SET tarifasPorComuna = ? 
+      WHERE nombre = 'Transportes Tamarindo' AND (tarifasPorComuna IS NULL OR tarifasPorComuna = '{}' OR tarifasPorComuna = '')
+    `).run(JSON.stringify({ "Paine": 20000, "La Florida": 8000, "Calera de Tango": 10000 }));
+  }
+
   // Seeding & Enforcing Clean Username-based Users
   const userCountRes = db.prepare('SELECT count(*) as count FROM users').get() as { count: number };
   if (userCountRes.count === 0) {
