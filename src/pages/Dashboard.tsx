@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { dbService } from '../services/db';
-import { Truck, MapPin, Search, Mail, Phone, Clock, Sparkles, Calendar, ArrowRight, ShieldCheck, LayoutDashboard, X, Copy } from 'lucide-react';
+import { Truck, MapPin, Search, Mail, Phone, Clock, Sparkles, Calendar, ArrowRight, ShieldCheck, LayoutDashboard, X, Copy, Tag } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
 import { Transport } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -44,7 +44,27 @@ export default function Dashboard() {
   // Update available transports when selectedComuna changes
   useEffect(() => {
     if (selectedComuna && transportsList.length > 0) {
-      const filtered = transportsList.filter(t => t.comunas.includes(selectedComuna.c) && t.activo);
+      const filtered = transportsList.filter(t => 
+        t.activo && (
+          t.comunas.includes(selectedComuna.c) || 
+          (t.tarifasPorComuna && selectedComuna.c in t.tarifasPorComuna)
+        )
+      );
+
+      // Sort transports: those with specific commune rate first, then by effective cost
+      filtered.sort((a, b) => {
+        const aHasCustom = Boolean(a.tarifasPorComuna && typeof a.tarifasPorComuna[selectedComuna.c] === 'number');
+        const bHasCustom = Boolean(b.tarifasPorComuna && typeof b.tarifasPorComuna[selectedComuna.c] === 'number');
+
+        if (aHasCustom && !bHasCustom) return -1;
+        if (!aHasCustom && bHasCustom) return 1;
+
+        // If both have or don't have custom rates, sort by price (lowest first)
+        const aCost = aHasCustom ? a.tarifasPorComuna![selectedComuna.c] : a.costoBase;
+        const bCost = bHasCustom ? b.tarifasPorComuna![selectedComuna.c] : b.costoBase;
+        return aCost - bCost;
+      });
+
       setAvailableTransports(filtered);
     } else {
       setAvailableTransports([]);
@@ -472,53 +492,89 @@ export default function Dashboard() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {availableTransports.map((transport) => (
-                      <div 
-                        key={transport.id}
-                        className="bg-slate-950/60 rounded-2xl border border-slate-800 hover:border-blue-500/40 transition-all p-4.5 flex flex-col justify-between space-y-4"
-                      >
-                        <div className="space-y-2">
-                          <div className="flex justify-between items-start">
-                            <h4 className="text-sm font-black tracking-tight text-white uppercase truncate max-w-[140px]">{transport.nombre}</h4>
-                            <span className={cn(
-                              "text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border shrink-0",
-                              transport.tipoServicio === 'express' ? "bg-purple-500/10 text-purple-400 border-purple-500/20" :
-                              transport.tipoServicio === 'cargo' ? "bg-orange-500/10 text-orange-400 border-orange-500/20" :
-                              "bg-blue-500/10 text-blue-400 border-blue-500/20"
-                            )}>
-                              {transport.tipoServicio}
-                            </span>
-                          </div>
+                    {availableTransports.map((transport) => {
+                      const hasCustomTariff = Boolean(
+                        selectedComuna &&
+                        transport.tarifasPorComuna &&
+                        typeof transport.tarifasPorComuna[selectedComuna.c] === 'number'
+                      );
 
-                          <div className="space-y-1.5 text-xs font-semibold text-slate-300 bg-slate-900/50 rounded-xl p-3 border border-slate-800/50">
-                            <div className="flex items-center justify-between">
-                              <span className="text-slate-550 text-[10px]">T. Estimado</span>
-                              <span className="text-slate-100 font-bold">{transport.tiempoEntrega}</span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <span className="text-slate-550 text-[10px]">Costo Base</span>
-                              <span className="text-blue-400 font-black font-mono">
-                                {transport.tarifaReferencia || formatCurrency(transport.costoBase)}
+                      return (
+                        <div 
+                          key={transport.id}
+                          className={cn(
+                            "rounded-2xl border transition-all p-4.5 flex flex-col justify-between space-y-4",
+                            hasCustomTariff 
+                              ? "bg-emerald-950/40 border-emerald-500/50 shadow-emerald-900/20 ring-1 ring-emerald-500/30"
+                              : "bg-slate-950/60 border-slate-800 hover:border-blue-500/40"
+                          )}
+                        >
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <h4 className="text-sm font-black tracking-tight text-white uppercase truncate max-w-[140px]">{transport.nombre}</h4>
+                                {hasCustomTariff && (
+                                  <span className="inline-flex items-center gap-1 text-[9px] font-black text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/30 mt-1">
+                                    <Tag className="w-2.5 h-2.5 text-emerald-400" />
+                                    Tarifa Especial
+                                  </span>
+                                )}
+                              </div>
+                              <span className={cn(
+                                "text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border shrink-0",
+                                transport.tipoServicio === 'express' ? "bg-purple-500/10 text-purple-400 border-purple-500/20" :
+                                transport.tipoServicio === 'cargo' ? "bg-orange-500/10 text-orange-400 border-orange-500/20" :
+                                "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                              )}>
+                                {transport.tipoServicio}
                               </span>
                             </div>
-                          </div>
-                        </div>
 
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const costo = transport.tarifaReferencia || formatCurrency(transport.costoBase);
-                            const text = `✅ *${transport.nombre}* llega a *${selectedComuna.c}*\n⏱ Tiempo: ${transport.tiempoEntrega}\n💰 Costo ref: ${costo}`;
-                            navigator.clipboard.writeText(text);
-                            toast.success(`Datos de ${transport.nombre} copiados al portapapeles`);
-                          }}
-                          className="w-full py-2.5 text-[10px] font-black text-blue-400 bg-blue-500/10 rounded-xl hover:bg-blue-600 hover:text-white hover:shadow-lg hover:shadow-blue-600/10 transition-all active:scale-95 flex items-center justify-center space-x-1.5 border border-blue-500/20"
-                        >
-                          <Copy className="w-3 h-3" />
-                          <span>Copiar Ficha Logística</span>
-                        </button>
-                      </div>
-                    ))}
+                            <div className="space-y-1.5 text-xs font-semibold text-slate-300 bg-slate-900/50 rounded-xl p-3 border border-slate-800/50">
+                              <div className="flex items-center justify-between">
+                                <span className="text-slate-400 text-[10px]">T. Estimado</span>
+                                <span className="text-slate-100 font-bold">{transport.tiempoEntrega}</span>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span className="text-slate-400 text-[10px]">
+                                  {hasCustomTariff ? `Tarifa ${selectedComuna.c}` : 'Costo Base'}
+                                </span>
+                                <span className={cn(
+                                  "font-black font-mono",
+                                  hasCustomTariff ? "text-emerald-400 text-sm" : "text-blue-400"
+                                )}>
+                                  {hasCustomTariff
+                                    ? formatCurrency(transport.tarifasPorComuna![selectedComuna.c])
+                                    : (transport.tarifaReferencia || formatCurrency(transport.costoBase))
+                                  }
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const costo = hasCustomTariff
+                                ? `${formatCurrency(transport.tarifasPorComuna![selectedComuna.c])} (Tarifa especial ${selectedComuna.c})`
+                                : (transport.tarifaReferencia || formatCurrency(transport.costoBase));
+                              const text = `✅ *${transport.nombre}* llega a *${selectedComuna.c}*\n⏱ Tiempo: ${transport.tiempoEntrega}\n💰 Costo ref: ${costo}`;
+                              navigator.clipboard.writeText(text);
+                              toast.success(`Datos de ${transport.nombre} copiados al portapapeles`);
+                            }}
+                            className={cn(
+                              "w-full py-2.5 text-[10px] font-black rounded-xl transition-all active:scale-95 flex items-center justify-center space-x-1.5 border",
+                              hasCustomTariff
+                                ? "text-emerald-300 bg-emerald-500/20 hover:bg-emerald-600 hover:text-white border-emerald-500/30"
+                                : "text-blue-400 bg-blue-500/10 hover:bg-blue-600 hover:text-white border-blue-500/20"
+                            )}
+                          >
+                            <Copy className="w-3 h-3" />
+                            <span>Copiar Ficha Logística</span>
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
