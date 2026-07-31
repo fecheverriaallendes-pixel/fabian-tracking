@@ -42,6 +42,21 @@ export default function CoverageSearch() {
           (t.tarifasPorComuna && selectedComuna.c in t.tarifasPorComuna)
         )
       );
+
+      // Sort transports: those with specific commune rate first, then by effective cost
+      filtered.sort((a, b) => {
+        const aHasCustom = Boolean(a.tarifasPorComuna && typeof a.tarifasPorComuna[selectedComuna.c] === 'number');
+        const bHasCustom = Boolean(b.tarifasPorComuna && typeof b.tarifasPorComuna[selectedComuna.c] === 'number');
+
+        if (aHasCustom && !bHasCustom) return -1;
+        if (!aHasCustom && bHasCustom) return 1;
+
+        // If both have or don't have custom rates, sort by price (lowest first)
+        const aCost = aHasCustom ? a.tarifasPorComuna![selectedComuna.c] : a.costoBase;
+        const bCost = bHasCustom ? b.tarifasPorComuna![selectedComuna.c] : b.costoBase;
+        return aCost - bCost;
+      });
+
       setAvailableTransports(filtered);
     } else {
       setAvailableTransports([]);
@@ -175,32 +190,52 @@ export default function CoverageSearch() {
           </motion.div>
         ) : selectedComuna && availableTransports.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {availableTransports.map((transport, index) => (
-              <motion.div 
-                key={transport.id} 
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05, type: 'spring', stiffness: 90, damping: 14 }}
-                className="bg-white rounded-3xl border border-slate-100 hover:border-blue-400 focus-within:border-blue-400 hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300 p-6 group relative overflow-hidden flex flex-col justify-between"
-              >
-                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-15 transition-all duration-300">
-                  <Truck className="w-24 h-24 text-blue-600 transform rotate-12 translate-x-8 -translate-y-8" />
-                </div>
+            {availableTransports.map((transport, index) => {
+              const hasCustomTariff = Boolean(
+                selectedComuna &&
+                transport.tarifasPorComuna &&
+                typeof transport.tarifasPorComuna[selectedComuna.c] === 'number'
+              );
 
-                <div className="relative z-10 space-y-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="text-lg font-bold text-slate-900 group-hover:text-blue-600 transition-colors uppercase tracking-tight">{transport.nombre}</h3>
-                      <span className={cn(
-                        "inline-flex items-center px-3 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider mt-2 border",
-                        transport.tipoServicio === 'express' ? "bg-purple-50 text-purple-700 border-purple-100" :
-                        transport.tipoServicio === 'cargo' ? "bg-orange-50 text-orange-700 border-orange-100" :
-                        "bg-blue-50 text-blue-700 border-blue-100"
-                      )}>
-                        {transport.tipoServicio}
-                      </span>
-                    </div>
+              return (
+                <motion.div 
+                  key={transport.id} 
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05, type: 'spring', stiffness: 90, damping: 14 }}
+                  className={cn(
+                    "bg-white rounded-3xl p-6 group relative overflow-hidden flex flex-col justify-between transition-all duration-300 hover:shadow-xl hover:-translate-y-1.5 border",
+                    hasCustomTariff 
+                      ? "border-emerald-300/80 shadow-emerald-50 ring-2 ring-emerald-500/20" 
+                      : "border-slate-100 hover:border-blue-400 focus-within:border-blue-400"
+                  )}
+                >
+                  <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-15 transition-all duration-300">
+                    <Truck className="w-24 h-24 text-blue-600 transform rotate-12 translate-x-8 -translate-y-8" />
                   </div>
+
+                  <div className="relative z-10 space-y-4">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="text-lg font-bold text-slate-900 group-hover:text-blue-600 transition-colors uppercase tracking-tight">{transport.nombre}</h3>
+                        <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                          <span className={cn(
+                            "inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border",
+                            transport.tipoServicio === 'express' ? "bg-purple-50 text-purple-700 border-purple-100" :
+                            transport.tipoServicio === 'cargo' ? "bg-orange-50 text-orange-700 border-orange-100" :
+                            "bg-blue-50 text-blue-700 border-blue-100"
+                          )}>
+                            {transport.tipoServicio}
+                          </span>
+                          {hasCustomTariff && (
+                            <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-200">
+                              <Tag className="w-3 h-3 text-emerald-600" />
+                              Tarifa Especial
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
 
                   {/* Special Tariff Alert Banner if applicable */}
                   {selectedComuna && transport.tarifasPorComuna && typeof transport.tarifasPorComuna[selectedComuna.c] === 'number' && (
@@ -265,7 +300,8 @@ export default function CoverageSearch() {
                   </div>
                 </div>
               </motion.div>
-            ))}
+            );
+          })}
           </div>
         ) : (
           <div className="text-center py-20 opacity-40">
